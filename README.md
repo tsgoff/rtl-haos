@@ -131,32 +131,36 @@ You should see logs indicating the bridge is connected and processing data:
 
 ## 🤖 Running as a Service (Optional)
 
-To keep the script running in the background on Linux, create a systemd service.
+To keep the script running in the background on Linux, create a systemd service.  
+This example assumes you’re using a virtual environment named `venv` inside `/home/pi/rtl-haos`.
 
 1.  Create file: `sudo nano /etc/systemd/system/rtl-bridge.service`
-2.  Paste the following (adjust paths to match your user):
+2.  Paste the following (adjust paths to match your user and venv location):
 
-```ini
-[Unit]
-Description=RTL-433 MQTT Bridge
-After=network.target
+    ```ini
+    [Unit]
+    Description=RTL-433 MQTT Bridge
+    After=network.target
 
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/rtl-haos
-ExecStart=/usr/bin/python3 /home/pi/rtl-haos/rtl_mqtt_bridge.py
-Restart=always
-RestartSec=10
+    [Service]
+    Type=simple
+    User=pi
+    WorkingDirectory=/home/pi/rtl-haos
+    ExecStart=/home/pi/rtl-haos/venv/bin/python /home/pi/rtl-haos/rtl_mqtt_bridge.py
+    Restart=always
+    RestartSec=10
 
-[Install]
-WantedBy=multi-user.target
-```
+    [Install]
+    WantedBy=multi-user.target
+    ```
 
-3.  Enable and start:
+3.  Reload systemd, then enable and start:
+
     ```bash
+    sudo systemctl daemon-reload
     sudo systemctl enable rtl-bridge.service
     sudo systemctl start rtl-bridge.service
     ```
+
 
 
