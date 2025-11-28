@@ -55,8 +55,20 @@ The goal is a “drop-in” bridge: plug in RTL-SDR(s), run this script, and wat
 
 1.  **Install System Dependencies** (Debian/Ubuntu/Raspberry Pi):
     ```bash
+    # 1. update and install system dependencies
     sudo apt update
-    sudo apt install rtl-433 git python pip python3-psutil python-paho-mqtt python3-paho-mqtt
+    sudo apt install rtl-433 git python3 pip3 python3-venv
+    
+    # 2. Create a virtual environment named 'venv' in your current directory
+    python3 -m venv venv
+    
+    # 3. Activate the virtual environment
+    source venv/bin/activate
+    
+    # Your command prompt will change to show you are in the 'venv' environment.
+    
+    # 4. Install the packages from your requirements file
+    pip3 install -r requirements.txt
     ```
 
 2.  **Clone the Repository:**
