@@ -10,6 +10,10 @@ Unlike standard `rtl_433` scripts, this project captures **detailed signal metri
 
 It also functions as a **System Monitor**, reporting the host machine's health (CPU, RAM, Disk, Temp) and the live status of the radio dongle itself, giving you a complete view of your hardware's performance in one place.
 
+For a list of supported wireless devices:
+https://github.com/merbanan/rtl_433
+
+
 ---
 
 ## ✨ Features
@@ -35,7 +39,7 @@ It also functions as a **System Monitor**, reporting the host machine's health (
 graph TD
     subgraph "RF Devices (Airwaves)"
         A[Weather Station] -->|433.92 MHz| D[Antenna]
-        B[Tire Sensor] -->|315 MHz| D
+        B[Motion Sensor] -->|315 MHz| D
         C[Utility Meter] -->|915 MHz| D
     end
 
@@ -105,7 +109,7 @@ sudo apt install -y rtl-sdr rtl-433 git python3 python3-pip python3-venv
 
 ### 2. Clone & Setup
 ```bash
-git clone [https://github.com/jaronmcd/rtl-haos.git](https://github.com/jaronmcd/rtl-haos.git)
+git clone https://github.com/jaronmcd/rtl-haos.git
 cd rtl-haos
 
 # Create and activate virtual environment
