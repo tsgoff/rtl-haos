@@ -10,7 +10,7 @@ Unlike standard `rtl_433` scripts, this project captures **detailed signal metri
 
 It also functions as a **System Monitor**, reporting the host machine's health (CPU, RAM, Disk, Temp) and the live status of the radio dongle itself, giving you a complete view of your hardware's performance in one place.
 
-For a list of supported devices:
+For a list of supported wireless devices:
 https://github.com/merbanan/rtl_433
 
 
