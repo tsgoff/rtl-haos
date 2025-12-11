@@ -3,7 +3,7 @@
 FILE: rtl_mqtt_bridge.py
 DESCRIPTION:
   The main executable script.
-  - UPDATED: Groups "Radio Status" under the main System/Computer device.
+  - UPDATED: Now prints raw output from rtl_433 if it's not JSON (catches config errors).
 """
 import subprocess
 import json
@@ -158,7 +158,6 @@ def discover_default_rtl_serial():
 
     print("[STARTUP] Could not parse RTL-SDR serial from rtl_eeprom output.")
     return None
-# rtl_mqtt_bridge.py (Partial - replace only the rtl_loop function)
 
 def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_model: str) -> None:
     # Radio Config
@@ -195,6 +194,7 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
 
         proc = None
         try:
+            # stderr=subprocess.STDOUT merges error messages into the standard output stream
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 
             for line in proc.stdout:
@@ -217,7 +217,7 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
                     )
 
                 # --- VALID DATA ---
-                if safe_line.startswith("{") and safe_line.endswith("}"):
+                elif safe_line.startswith("{") and safe_line.endswith("}"):
                     try:
                         data = json.loads(safe_line)
                         # STATUS UPDATE: Online
@@ -284,6 +284,12 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
                             dispatch_reading(clean_id, "temperature", value, dev_name, model, mqtt_handler)
                         else:
                             dispatch_reading(clean_id, key, value, dev_name, model, mqtt_handler)
+                
+                # --- CATCH ALL: PRINT RAW OUTPUT (ERRORS/WARNINGS) ---
+                else:
+                    # This catches "illegal option", "Tuned to", and other non-JSON output
+                    if safe_line:
+                        print(f"[{radio_name} LOG] {safe_line}")
 
             if proc: proc.wait()
             if proc.returncode != 0:
