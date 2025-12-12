@@ -342,7 +342,7 @@ def main():
     # This sends a static sensor "Bridge Version" to the Host device
     mqtt_handler.send_sensor(
         sys_id, 
-        "rtl-haos_version", 
+        "RTL-HAOS_version", 
         ver, 
         sys_name, 
         sys_model, 
