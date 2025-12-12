@@ -1,68 +1,19 @@
-#!/usr/bin/env python3
 """
-FILE: rtl_mqtt_bridge.py
+FILE: rtl_manager.py
 DESCRIPTION:
-  The main executable script.
-  - UPDATED: Reads version from config.yaml.
-  - UPDATED: Captures and prints raw stderr from rtl_433 failures.
-  - UPDATED: Publishes Version as a Home Assistant Entity.
+  Manages the 'rtl_433' subprocess interactions.
+  - rtl_loop(): The main thread that reads stdout from rtl_433.
+  - discover_default_rtl_serial(): Auto-detects USB stick serial numbers.
 """
 import subprocess
 import json
 import time
-import threading
-import sys
-import importlib.util
 import fnmatch
-import socket
-import os
-import statistics 
-# from rich import print
-
-# --- PRE-FLIGHT DEPENDENCY CHECK ---
-def check_dependencies():
-    # 1. Check for the rtl_433 binary (System Dependency)
-    if not subprocess.run(["which", "rtl_433"], capture_output=True).stdout:
-        print("CRITICAL: 'rtl_433' binary not found. Please install it (e.g., sudo apt install rtl-433).")
-        sys.exit(1)
-
-    # 2. Check for Paho MQTT (Python Dependency)
-    if importlib.util.find_spec("paho") is None:
-        print("CRITICAL: Python dependency 'paho-mqtt' not found.")
-        print("Please install requirements: uv sync")
-        sys.exit(1)
-
-check_dependencies()
-
-import paho.mqtt.client as mqtt
 import config
-from utils import clean_mac, calculate_dew_point, get_system_mac
-from mqtt_handler import HomeNodeMQTT
-from field_meta import FIELD_META 
-from system_monitor import system_stats_loop
+from utils import clean_mac, calculate_dew_point
 
-# --- BUFFER GLOBALS ---
-DATA_BUFFER = {} 
-BUFFER_LOCK = threading.Lock()
-
-# ---------------- HELPERS ----------------
-def get_version():
-    """Retrieves the version string from config.yaml."""
-    try:
-        # Try finding config.yaml in the directory of the script
-        cfg_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "config.yaml")
-        if os.path.exists(cfg_path):
-            with open(cfg_path, "r") as f:
-                for line in f:
-                    if line.strip().startswith("version:"):
-                        # Extract "1.0.1" from 'version: "1.0.1"'
-                        ver = line.split(":", 1)[1].strip().replace('"', '').replace("'", "")
-                        return f"v{ver}"
-    except Exception:
-        pass
-    return "Unknown"
-
-def flatten(d, sep: str = "_") -> dict:
+def flatten(d, sep="_") -> dict:
+    """Recursively flattens a nested dictionary."""
     obj = {}
     def recurse(t, parent: str = ""):
         if isinstance(t, list):
@@ -77,6 +28,7 @@ def flatten(d, sep: str = "_") -> dict:
     return obj
 
 def is_blocked_device(clean_id: str, model: str) -> bool:
+    """Checks against Blacklist in config."""
     patterns = getattr(config, "DEVICE_BLACKLIST", None)
     if not patterns: return False
     for pattern in patterns:
@@ -84,61 +36,8 @@ def is_blocked_device(clean_id: str, model: str) -> bool:
         if fnmatch.fnmatch(str(model), pattern): return True
     return False
 
-# ---------------- BUFFERING / DISPATCH ----------------
-def dispatch_reading(clean_id, field, value, dev_name, model, mqtt_handler):
-    interval = getattr(config, "RTL_THROTTLE_INTERVAL", 0)
-    if interval <= 0:
-        mqtt_handler.send_sensor(clean_id, field, value, dev_name, model, is_rtl=True)
-        return
-
-    with BUFFER_LOCK:
-        if clean_id not in DATA_BUFFER:
-            DATA_BUFFER[clean_id] = {}
-        if "__meta__" not in DATA_BUFFER[clean_id]:
-            DATA_BUFFER[clean_id]["__meta__"] = {"name": dev_name, "model": model}
-        if field not in DATA_BUFFER[clean_id]:
-            DATA_BUFFER[clean_id][field] = []
-        DATA_BUFFER[clean_id][field].append(value)
-
-def throttle_flush_loop(mqtt_handler):
-    interval = getattr(config, "RTL_THROTTLE_INTERVAL", 30)
-    if interval <= 0: return
-
-    print(f"[THROTTLE] Averaging data every {interval} seconds.")
-    while True:
-        time.sleep(interval)
-        with BUFFER_LOCK:
-            if not DATA_BUFFER: continue
-            current_batch = DATA_BUFFER.copy()
-            DATA_BUFFER.clear()
-
-        count_sent = 0
-        for clean_id, device_data in current_batch.items():
-            meta = device_data.get("__meta__", {})
-            dev_name = meta.get("name", "Unknown")
-            model = meta.get("model", "Unknown")
-
-            for field, values in device_data.items():
-                if field == "__meta__": continue
-                if not values: continue
-
-                final_val = None
-                try:
-                    if isinstance(values[0], (int, float)):
-                        final_val = round(statistics.mean(values), 2)
-                        if final_val.is_integer(): final_val = int(final_val)
-                    else:
-                        final_val = values[-1]
-                except:
-                    final_val = values[-1]
-
-                mqtt_handler.send_sensor(clean_id, field, final_val, dev_name, model, is_rtl=True)
-                count_sent += 1
-        
-        if getattr(config, "DEBUG_RAW_JSON", False) and count_sent > 0:
-            print(f"[THROTTLE] Flushed {count_sent} averaged readings.")
-
 def discover_default_rtl_serial():
+    """Attempts to read the serial number of the first connected RTL-SDR."""
     try:
         proc = subprocess.run(
             ["rtl_eeprom"],
@@ -165,13 +64,16 @@ def discover_default_rtl_serial():
                 if candidate:
                     serial = candidate.split()[0]
                     break
-
     if serial:
         return serial
     print("[STARTUP] Could not parse RTL-SDR serial from rtl_eeprom output.")
     return None
 
-def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_model: str) -> None:
+def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_model: str) -> None:
+    """
+    Runs the rtl_433 process in a loop.
+    Parses JSON output and passes it to data_processor.dispatch_reading().
+    """
     # Radio Config
     device_id = radio_config.get("id", "0")
     frequency = radio_config.get("freq", "433.92M")
@@ -179,13 +81,8 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
     sample_rate = radio_config.get("rate", "250k")
 
     # --- Names & IDs ---
-    # The internal field name (used for topic/unique_id)
     status_field = f"radio_status_{device_id}"
-    
-    # The Friendly Name for Home Assistant (e.g. "Weather Radio Status")
     status_friendly_name = f"{radio_name}"
-
-    # System name (used for device grouping)
     sys_name = f"{sys_model} ({sys_id})"
 
     # CMD
@@ -197,7 +94,7 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
     print(f"[RTL] Manager started for {radio_name}. Monitoring...")
 
     while True:
-        # 1. Announce "Scanning" with custom Friendly Name
+        # 1. Announce "Scanning"
         mqtt_handler.send_sensor(
             sys_id, status_field, "Scanning...", sys_name, sys_model, 
             is_rtl=True, friendly_name=status_friendly_name
@@ -205,8 +102,8 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
         time.sleep(2)
 
         last_log_line = ""
-
         proc = None
+        
         try:
             # stderr=subprocess.STDOUT merges error messages into the standard output stream
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
@@ -263,17 +160,17 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
                     if getattr(config, "DEBUG_RAW_JSON", False):
                         print(f"[{radio_name}] RX: {safe_line}")
 
-                    # Utilities
+                    # Utilities (Meter Reading Math)
                     if "Neptune-R900" in model and data.get("consumption") is not None:
                         real_val = float(data["consumption"]) / 10.0
-                        dispatch_reading(clean_id, "meter_reading", real_val, dev_name, model, mqtt_handler)
+                        data_processor.dispatch_reading(clean_id, "meter_reading", real_val, dev_name, model)
                         del data["consumption"]
 
                     if ("SCM" in model or "ERT" in model) and data.get("consumption") is not None:
-                        dispatch_reading(clean_id, "Consumption", data["consumption"], dev_name, model, mqtt_handler)
+                        data_processor.dispatch_reading(clean_id, "Consumption", data["consumption"], dev_name, model)
                         del data["consumption"]
 
-                    # Dew Point
+                    # Dew Point Calculation
                     t_c = None
                     if "temperature_C" in data: t_c = data["temperature_C"]
                     elif "temp_C" in data: t_c = data["temp_C"]
@@ -283,21 +180,23 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
                     if t_c is not None and data.get("humidity") is not None:
                         dp_f = calculate_dew_point(t_c, data["humidity"])
                         if dp_f is not None:
-                            dispatch_reading(clean_id, "dew_point", dp_f, dev_name, model, mqtt_handler)
+                            data_processor.dispatch_reading(clean_id, "dew_point", dp_f, dev_name, model)
 
                     # Flatten & Send
                     flat = flatten(data)
                     for key, value in flat.items():
                         if key in getattr(config, 'SKIP_KEYS', []): continue
+                        
+                        # Unit Conversions
                         if key in ["temperature_C", "temp_C"] and isinstance(value, (int, float)):
                             val_f = round(value * 1.8 + 32.0, 1)
-                            dispatch_reading(clean_id, "temperature", val_f, dev_name, model, mqtt_handler)
+                            data_processor.dispatch_reading(clean_id, "temperature", val_f, dev_name, model)
                         elif key in ["temperature_F", "temp_F", "temperature"] and isinstance(value, (int, float)):
-                            dispatch_reading(clean_id, "temperature", value, dev_name, model, mqtt_handler)
+                            data_processor.dispatch_reading(clean_id, "temperature", value, dev_name, model)
                         else:
-                            dispatch_reading(clean_id, key, value, dev_name, model, mqtt_handler)
+                            data_processor.dispatch_reading(clean_id, key, value, dev_name, model)
                 
-                # --- CATCH ALL: PRINT RAW OUTPUT (ERRORS/WARNINGS) ---
+                # --- CATCH ALL: LOG OUTPUT ---
                 else:
                     if safe_line:
                         last_log_line = safe_line
@@ -305,13 +204,10 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
 
             if proc: proc.wait()
             if proc.returncode != 0:
-                # SMART REPORTING: If we have a last log line, use it!
                 error_msg = f"Crashed: {last_log_line}" if last_log_line else f"Crashed Code {proc.returncode}"
-                mqtt_msg = error_msg[:255]
-
                 print(f"[{radio_name}] Process exited with code {proc.returncode}")
                 mqtt_handler.send_sensor(
-                    sys_id, status_field, mqtt_msg, sys_name, sys_model, 
+                    sys_id, status_field, error_msg[:255], sys_name, sys_model, 
                     is_rtl=True, friendly_name=status_friendly_name
                 )
 
@@ -324,77 +220,3 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
 
         print(f"[{radio_name}] Retrying in 30 seconds...")
         time.sleep(30)
-
-def main():
-    ver = get_version()
-    print(f"--- RTL-HAOS ({ver}) ---")
-
-    mqtt_handler = HomeNodeMQTT()
-    mqtt_handler.start()
-
-    # --- 1. GET SYSTEM IDENTITY ---
-    # We grab these here so we can pass them to the RTL loop
-    sys_id = get_system_mac().replace(":", "").lower()
-    sys_model = socket.gethostname().title()
-    sys_name = f"{sys_model} ({sys_id})"
-
-    # --- NEW: PUBLISH VERSION ENTITY ---
-    # This sends a static sensor "Bridge Version" to the Host device
-    mqtt_handler.send_sensor(
-        sys_id, 
-        "RTL-HAOS_version", 
-        ver, 
-        sys_name, 
-        sys_model, 
-        is_rtl=False # False puts it in diagnostic/system category if handled
-    )
-
-    # --- 2. START RTL THREADS ---
-    rtl_config = getattr(config, "RTL_CONFIG", None)
-
-    if rtl_config:
-        # Explicit radios from config.py
-        for radio in rtl_config:
-            threading.Thread(
-                target=rtl_loop,
-                args=(radio, mqtt_handler, sys_id, sys_model),
-                daemon=True,
-            ).start()
-    else:
-        # AUTO MODE: no RTL_CONFIG defined or it's empty.
-        auto_serial = discover_default_rtl_serial()
-
-        if auto_serial:
-            print(f"[STARTUP] Auto-detected RTL-SDR serial: {auto_serial}")
-            auto_radio = {
-                "name": f"RTL_{auto_serial}",
-                "id": auto_serial,
-            }
-        else:
-            # Fallback if we can't read the serial
-            print("[STARTUP] Using default RTL-SDR id '0'")
-            auto_radio = {
-                "name": "RTL_auto",
-                "id": "0",
-            }
-
-        threading.Thread(
-            target=rtl_loop,
-            args=(auto_radio, mqtt_handler, sys_id, sys_model),
-            daemon=True,
-        ).start()
-
-    # --- 3. START SYSTEM MONITOR ---
-    threading.Thread(target=system_stats_loop, args=(mqtt_handler, sys_id, sys_model), daemon=True).start()
-
-    # --- 4. START THROTTLE FLUSHER ---
-    threading.Thread(target=throttle_flush_loop, args=(mqtt_handler,), daemon=True).start()
-
-    try:
-        while True: time.sleep(1)
-    except KeyboardInterrupt:
-        print("\n[SHUTDOWN] Stopping MQTT...")
-        mqtt_handler.stop()
-
-if __name__ == "__main__":
-    main()

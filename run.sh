@@ -66,4 +66,4 @@ else
     echo "[STARTUP] MQTT Host: ${MQTT_HOST:-localhost}:${MQTT_PORT:-1883}"
 fi
 
-exec python3 /app/rtl_mqtt_bridge.py
+exec python3 /app/main.py

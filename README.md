@@ -108,7 +108,7 @@ graph TD
 
 ## 📂 Project Layout
 
-- `rtl_mqtt_bridge.py` – Main script. Starts rtl_433 processes, system monitor, and MQTT publishing.
+- `main.py` – Main script. Starts rtl_433 processes, system monitor, and MQTT publishing.
 - `.env.example` – Template for environment variables. Copy to `.env`.
 
 ---
@@ -340,7 +340,7 @@ docker compose logs -f
 
 ```bash
 cd rtl-haos
-uv run python rtl_mqtt_bridge.py
+uv run python main.py
 ```
 
 **Expected Output:**
@@ -426,7 +426,7 @@ To keep the bridge running 24/7 using the native installation method, use `syste
       ExecStartPre=/bin/sleep 10
 
       # CHANGE THESE PATHS to match your virtual environment and script location
-      ExecStart=.venv/bin/python3 rtl_mqtt_bridge.py
+      ExecStart=.venv/bin/python3 main.py
 
       # Restart automatically if it crashes
       Restart=on-failure
