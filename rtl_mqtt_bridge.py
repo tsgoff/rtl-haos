@@ -3,8 +3,9 @@
 FILE: rtl_mqtt_bridge.py
 DESCRIPTION:
   The main executable script.
-  - UPDATED: Reads version exclusively from config.yaml.
+  - UPDATED: Reads version from config.yaml.
   - UPDATED: Captures and prints raw stderr from rtl_433 failures.
+  - UPDATED: Publishes Version as a Home Assistant Entity.
 """
 import subprocess
 import json
@@ -16,8 +17,7 @@ import fnmatch
 import socket
 import os
 import statistics 
-from rich import print
-
+# from rich import print
 
 # --- PRE-FLIGHT DEPENDENCY CHECK ---
 def check_dependencies():
@@ -49,13 +49,13 @@ BUFFER_LOCK = threading.Lock()
 def get_version():
     """Retrieves the version string from config.yaml."""
     try:
-        # Try finding config.yaml in the current directory
+        # Try finding config.yaml in the directory of the script
         cfg_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "config.yaml")
         if os.path.exists(cfg_path):
             with open(cfg_path, "r") as f:
                 for line in f:
                     if line.strip().startswith("version:"):
-                        # Extract version between quotes or after colon
+                        # Extract "1.0.1" from 'version: "1.0.1"'
                         ver = line.split(":", 1)[1].strip().replace('"', '').replace("'", "")
                         return f"v{ver}"
     except Exception:
@@ -139,10 +139,6 @@ def throttle_flush_loop(mqtt_handler):
             print(f"[THROTTLE] Flushed {count_sent} averaged readings.")
 
 def discover_default_rtl_serial():
-    """
-    Try to read the serial number of the default RTL-SDR using rtl_eeprom.
-    Returns the serial string, or None if it can't be determined.
-    """
     try:
         proc = subprocess.run(
             ["rtl_eeprom"],
@@ -162,7 +158,6 @@ def discover_default_rtl_serial():
 
     for line in output.splitlines():
         line = line.strip()
-        # Typical lines contain "Serial number:" or "S/N:"
         if "Serial number" in line or "serial number" in line or "S/N" in line:
             parts = line.split(":", 1)
             if len(parts) == 2:
@@ -173,7 +168,6 @@ def discover_default_rtl_serial():
 
     if serial:
         return serial
-
     print("[STARTUP] Could not parse RTL-SDR serial from rtl_eeprom output.")
     return None
 
@@ -247,8 +241,6 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
                         continue
 
                     # --- SENSOR PROCESSING (Standard) ---
-                    # Note: We do NOT pass friendly_name here, because these are standard sensors
-                    # (Temperature, Humidity) that should use the default lookup logic.
                     model = data.get("model", "Generic")
                     sid = data.get("id") or data.get("channel") or "unknown"
                     clean_id = clean_mac(sid)
@@ -305,7 +297,6 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
                 
                 # --- CATCH ALL: PRINT RAW OUTPUT (ERRORS/WARNINGS) ---
                 else:
-                    # This catches "illegal option", "Tuned to", and other non-JSON output
                     if safe_line:
                         print(f"[{radio_name} LOG] {safe_line}")
 
@@ -329,7 +320,7 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
 
 def main():
     ver = get_version()
-    print(f"--- RTL-MQTT BRIDGE + SYSTEM MONITOR (Version: {ver}) ---")
+    print(f"--- RTL-MQTT BRIDGE + SYSTEM MONITOR ({ver}) ---")
 
     mqtt_handler = HomeNodeMQTT()
     mqtt_handler.start()
@@ -338,6 +329,18 @@ def main():
     # We grab these here so we can pass them to the RTL loop
     sys_id = get_system_mac().replace(":", "").lower()
     sys_model = socket.gethostname().title()
+    sys_name = f"{sys_model} ({sys_id})"
+
+    # --- NEW: PUBLISH VERSION ENTITY ---
+    # This sends a static sensor "Bridge Version" to the Host device
+    mqtt_handler.send_sensor(
+        sys_id, 
+        "bridge_version", 
+        ver, 
+        sys_name, 
+        sys_model, 
+        is_rtl=False # False puts it in diagnostic/system category if handled
+    )
 
     # --- 2. START RTL THREADS ---
     rtl_config = getattr(config, "RTL_CONFIG", None)
@@ -352,7 +355,6 @@ def main():
             ).start()
     else:
         # AUTO MODE: no RTL_CONFIG defined or it's empty.
-        # Try to detect the actual RTL-SDR serial so we can use it as the ID.
         auto_serial = discover_default_rtl_serial()
 
         if auto_serial:
