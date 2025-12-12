@@ -204,6 +204,8 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
         )
         time.sleep(2)
 
+        last_log_line = ""
+
         proc = None
         try:
             # stderr=subprocess.STDOUT merges error messages into the standard output stream
@@ -214,7 +216,7 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
                 safe_line = line.strip()
 
                 # --- ERROR DETECTION ---
-                if "usb_open error" in safe_line or "No supported devices" in safe_line:
+                if "usb_open error" in safe_line or "No supported devices" in safe_line or "No matching device" in safe_line:
                     print(f"[{radio_name}] Hardware missing!")
                     mqtt_handler.send_sensor(
                         sys_id, status_field, "No Device Found", sys_name, sys_model, 
@@ -298,13 +300,18 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
                 # --- CATCH ALL: PRINT RAW OUTPUT (ERRORS/WARNINGS) ---
                 else:
                     if safe_line:
+                        last_log_line = safe_line
                         print(f"[{radio_name} LOG] {safe_line}")
 
             if proc: proc.wait()
             if proc.returncode != 0:
+                # SMART REPORTING: If we have a last log line, use it!
+                error_msg = f"Crashed: {last_log_line}" if last_log_line else f"Crashed Code {proc.returncode}"
+                mqtt_msg = error_msg[:255]
+
                 print(f"[{radio_name}] Process exited with code {proc.returncode}")
                 mqtt_handler.send_sensor(
-                    sys_id, status_field, "Error: Crashed", sys_name, sys_model, 
+                    sys_id, status_field, mqtt_msg, sys_name, sys_model, 
                     is_rtl=True, friendly_name=status_friendly_name
                 )
 
