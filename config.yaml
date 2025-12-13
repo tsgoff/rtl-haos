@@ -55,9 +55,9 @@ schema:
   rtl_expire_after: int
   rtl_throttle_interval: int
   debug_raw_json: bool
-  rtl_default_freq: str
-  rtl_default_hop_interval: int
-  rtl_default_rate: str
+  rtl_default_freq: str?
+  rtl_default_hop_interval: int?
+  rtl_default_rate: str?
   rtl_config:
     - name: str
       id: str

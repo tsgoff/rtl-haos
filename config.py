@@ -11,15 +11,17 @@ if os.path.exists(OPTIONS_PATH):
         with open(OPTIONS_PATH, "r") as f:
             options = json.load(f)
             for key, value in options.items():
-                # Python expects "RTL_DEFAULT_FREQ", HA gives "rtl_default_freq"
                 env_key = key.upper()
                 
-                # Handle lists/dicts (like rtl_config) by converting to string
+                # 1. Handle Lists/Dicts (Serialize to JSON)
                 if isinstance(value, (list, dict)):
                     os.environ[env_key] = json.dumps(value)
-                # Only set the env var if the value is NOT empty
-                elif str(value).strip():  # <--- NEW CHECK
+                
+                # 2. Handle standard values (Skip if None/Empty)
+                #    This ensures we don't load "None" as a string if the user clears the box
+                elif value is not None and str(value).strip():
                     os.environ[env_key] = str(value)
+
         print(f"[CONFIG] Success! Loaded settings from Home Assistant.")
     except Exception as e:
         print(f"[CONFIG] Error loading options: {e}")
