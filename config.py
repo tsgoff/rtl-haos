@@ -64,6 +64,11 @@ class Settings(BaseSettings):
         description="Hop interval in seconds. Only active if multiple frequencies are set."
     )
 
+    rtl_default_rate: str = Field(
+        default="250k",
+        description="Sample rate (e.g. 250k, 1024k, 2048k)"
+    )
+
     bridge_id: str = Field(
         default="42", 
         description="Static unique ID for the bridge"
@@ -180,3 +185,4 @@ RTL_THROTTLE_INTERVAL = settings.rtl_throttle_interval
 # EXPORT NEW DEFAULTS
 RTL_DEFAULT_FREQ = settings.rtl_default_freq
 RTL_DEFAULT_HOP_INTERVAL = settings.rtl_default_hop_interval
+RTL_DEFAULT_RATE = settings.rtl_default_rate

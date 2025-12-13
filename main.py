@@ -133,16 +133,18 @@ def main():
             auto_radio = {
                 "name": f"RTL_{auto_serial}", 
                 "id": auto_serial,
-                "freq": config.RTL_DEFAULT_FREQ,             # <--- INJECTED
-                "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL # <--- INJECTED
+                "freq": config.RTL_DEFAULT_FREQ,            
+                "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL,
+                "rate": config.RTL_DEFAULT_RATE   
             }
         else:
             print("[STARTUP] Using default RTL-SDR id '0'")
             auto_radio = {
                 "name": "RTL_auto", 
                 "id": "0",
-                "freq": config.RTL_DEFAULT_FREQ,             # <--- INJECTED
-                "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL # <--- INJECTED
+                "freq": config.RTL_DEFAULT_FREQ,             
+                "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL,
+                "rate": config.RTL_DEFAULT_RATE
             }
 
         threading.Thread(
