@@ -3,16 +3,17 @@
 FILE: mqtt_handler.py
 DESCRIPTION:
   Manages the connection to the MQTT Broker.
-  - UPDATED: Support for custom friendly names (e.g. "Weather Radio Status").
+  - UPDATED: Added 'Nuke' button to clear all entities (requires 5 presses).
 """
 import json
 import threading
 import sys
+import time
 import paho.mqtt.client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion
 # Local imports
 import config
-from utils import clean_mac
+from utils import clean_mac, get_system_mac
 from field_meta import FIELD_META
 
 class HomeNodeMQTT:
@@ -21,7 +22,10 @@ class HomeNodeMQTT:
         self.TOPIC_AVAILABILITY = f"home/status/rtl_bridge{config.ID_SUFFIX}/availability"
         self.client.username_pw_set(config.MQTT_SETTINGS["user"], config.MQTT_SETTINGS["pass"])
         self.client.will_set(self.TOPIC_AVAILABILITY, "offline", retain=True)
+        
+        # Callbacks
         self.client.on_connect = self._on_connect
+        self.client.on_message = self._on_message
 
         self.discovery_published = set()
         self.last_sent_values = {}
@@ -29,12 +33,110 @@ class HomeNodeMQTT:
         
         self.discovery_lock = threading.Lock()
 
+        # --- Nuke Logic Variables ---
+        self.nuke_counter = 0
+        self.nuke_last_press = 0
+        self.NUKE_THRESHOLD = 5       # Presses required
+        self.NUKE_TIMEOUT = 5.0       # Seconds before counter resets
+
     def _on_connect(self, c, u, f, rc, p=None):
         if rc == 0:
             c.publish(self.TOPIC_AVAILABILITY, "online", retain=True)
             print("[MQTT] Connected Successfully.")
+            
+            # 1. Subscribe to Nuke Command
+            # We use a specific topic for the button command
+            self.nuke_command_topic = f"home/status/rtl_bridge{config.ID_SUFFIX}/nuke/set"
+            c.subscribe(self.nuke_command_topic)
+            
+            # 2. Publish the Nuke Button Discovery
+            self._publish_nuke_button()
+            
         else:
             print(f"[MQTT] Connection Failed! Code: {rc}")
+
+    def _on_message(self, client, userdata, msg):
+        """Handles incoming commands from Home Assistant."""
+        try:
+            if msg.topic == self.nuke_command_topic:
+                self._handle_nuke_press()
+        except Exception as e:
+            print(f"[MQTT] Error handling message: {e}")
+
+    def _publish_nuke_button(self):
+        """Creates the 'Nuke Entities' button on the Bridge device."""
+        sys_id = get_system_mac().replace(":", "").lower()
+        unique_id = f"rtl_bridge_nuke{config.ID_SUFFIX}"
+        
+        payload = {
+            "name": "Nuke All Entities",
+            "command_topic": self.nuke_command_topic,
+            "unique_id": unique_id,
+            "icon": "mdi:delete-alert",
+            "device": {
+                "identifiers": [f"rtl433_{config.BRIDGE_NAME}_{sys_id}"],
+                "manufacturer": "rtl-haos",
+                "model": config.BRIDGE_NAME,
+                "name": f"{config.BRIDGE_NAME} ({sys_id})"
+            },
+            "availability_topic": self.TOPIC_AVAILABILITY
+        }
+        
+        # Publish to the 'button' domain
+        config_topic = f"homeassistant/button/{unique_id}/config"
+        self.client.publish(config_topic, json.dumps(payload), retain=True)
+
+    def _handle_nuke_press(self):
+        """Counts presses and triggers Nuke if threshold met."""
+        now = time.time()
+        
+        # Reset if too much time passed
+        if now - self.nuke_last_press > self.NUKE_TIMEOUT:
+            self.nuke_counter = 0
+        
+        self.nuke_counter += 1
+        self.nuke_last_press = now
+        
+        remaining = self.NUKE_THRESHOLD - self.nuke_counter
+        
+        if remaining > 0:
+            print(f"[NUKE] WARNING: Press {remaining} more times to DELETE ALL ENTITIES.")
+        else:
+            self.nuke_all()
+            self.nuke_counter = 0
+
+    def nuke_all(self):
+        """Deletes all known entities from Home Assistant and clears memory."""
+        print("\n" + "!"*40)
+        print("[NUKE] DETONATED! Clearing all discovered entities...")
+        print("!"*40 + "\n")
+        
+        with self.discovery_lock:
+            count = 0
+            for unique_id in list(self.discovery_published):
+                # Skip the Nuke button itself (we want to keep that!)
+                if "rtl_bridge_nuke" in unique_id:
+                    continue
+                
+                # Construct the config topic used for discovery
+                # NOTE: This assumes 'sensor' domain as used in _publish_discovery.
+                # If you use other domains, this needs to check them too.
+                topic = f"homeassistant/sensor/{unique_id}/config"
+                
+                # Sending an empty payload removes the entity from HA
+                self.client.publish(topic, "", retain=True)
+                count += 1
+            
+            # Clear internal memory
+            self.discovery_published.clear()
+            self.last_sent_values.clear()
+            self.tracked_devices.clear()
+            
+            print(f"[NUKE] Cleared {count} entities.")
+            
+            # Re-publish the Nuke button immediately so it stays available
+            # (We cleared discovery_published, so we must assume it's gone from our memory)
+            self._publish_nuke_button()
 
     def start(self):
         print(f"[STARTUP] Connecting to MQTT Broker at {config.MQTT_SETTINGS['host']}...")
@@ -60,8 +162,6 @@ class HomeNodeMQTT:
             default_meta = (None, "none", "mdi:eye", sensor_name.replace("_", " ").title())
             
             # --- 1. METADATA LOOKUP (Get Icon/Unit/Class) ---
-            # We separate metadata lookup from naming so we can override the name 
-            # while keeping the correct icon (e.g. mdi:usb-port for radio_status).
             if sensor_name.startswith("radio_status"):
                 base_meta = FIELD_META.get("radio_status", default_meta)
                 unit, device_class, icon, default_fname = base_meta
@@ -74,10 +174,8 @@ class HomeNodeMQTT:
 
             # --- 2. FRIENDLY NAME LOGIC ---
             if friendly_name_override:
-                # Use the custom name passed from the bridge (e.g. "Weather Radio Status")
                 friendly_name = friendly_name_override
             elif sensor_name.startswith("radio_status_"):
-                # Fallback if no override: "Radio Status 101"
                 suffix = sensor_name.replace("radio_status_", "")
                 friendly_name = f"{default_fname} {suffix}"
             else:
@@ -85,12 +183,8 @@ class HomeNodeMQTT:
 
             # --- 3. CATEGORIZATION LOGIC ---
             entity_cat = "diagnostic"
-
-            # EXCEPTION A: Explicitly listed in config.MAIN_SENSORS
             if sensor_name in getattr(config, 'MAIN_SENSORS', []):
                 entity_cat = None 
-            
-            # EXCEPTION B: It is a Radio Status field
             if sensor_name.startswith("radio_status"):
                 entity_cat = None
 
@@ -109,7 +203,6 @@ class HomeNodeMQTT:
 
             if unit: payload["unit_of_measurement"] = unit
             if device_class != "none": payload["device_class"] = device_class
-            
             if entity_cat: payload["entity_category"] = entity_cat
 
             if device_class in ["gas", "energy", "water", "monetary", "precipitation"]:
@@ -119,7 +212,6 @@ class HomeNodeMQTT:
             if device_class in ["wind_direction"]:
                 payload["state_class"] = "measurement_angle"
 
-            # If it's a version sensor, DO NOT set an expiration time
             if "version" not in sensor_name.lower():
                 payload["expire_after"] = config.RTL_EXPIRE_AFTER
             payload["availability_topic"] = self.TOPIC_AVAILABILITY
