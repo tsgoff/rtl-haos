@@ -18,12 +18,12 @@ _original_print = builtins.print
 
 def timestamped_print(*args, **kwargs):
     """Adds a timestamp to every print() call."""
-    # Format: [2025-12-12 18:05:00]
-    now = datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+    # Format: [18:05:00] INFO:
+    now = datetime.now().strftime("[%H:%M:%S]")
     
-    # Pass the timestamp as the first argument to the original print
-    _original_print(now, *args, **kwargs)
-
+    # Mimic the bashio style (Short time + INFO tag)
+    _original_print(f"{now} INFO:", *args, **kwargs)
+    
 # Overwrite Python's built-in print with our new version
 builtins.print = timestamped_print
 # ------------------------------------
