@@ -13,7 +13,7 @@ uart: true
 startup: services
 boot: auto
 options:
-  mqtt_host: ""
+  mqtt_host: core-mosquitto
   mqtt_port: 1883
   mqtt_user: ""
   mqtt_pass: ""
