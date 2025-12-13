@@ -3,7 +3,8 @@
 FILE: mqtt_handler.py
 DESCRIPTION:
   Manages the connection to the MQTT Broker.
-  - UPDATED: Added 'Nuke' button to clear all entities (requires 5 presses).
+  - UPDATED: 'Nuke' now performs a Wildcard Scan to find and delete ALL 
+    old/stale rtl-haos entities, not just current ones.
 """
 import json
 import threading
@@ -38,6 +39,7 @@ class HomeNodeMQTT:
         self.nuke_last_press = 0
         self.NUKE_THRESHOLD = 5       # Presses required
         self.NUKE_TIMEOUT = 5.0       # Seconds before counter resets
+        self.is_nuking = False        # Flag for Search-and-Destroy mode
 
     def _on_connect(self, c, u, f, rc, p=None):
         if rc == 0:
@@ -45,21 +47,48 @@ class HomeNodeMQTT:
             print("[MQTT] Connected Successfully.")
             
             # 1. Subscribe to Nuke Command
-            # We use a specific topic for the button command
             self.nuke_command_topic = f"home/status/rtl_bridge{config.ID_SUFFIX}/nuke/set"
             c.subscribe(self.nuke_command_topic)
             
             # 2. Publish the Nuke Button Discovery
             self._publish_nuke_button()
-            
         else:
             print(f"[MQTT] Connection Failed! Code: {rc}")
 
     def _on_message(self, client, userdata, msg):
-        """Handles incoming commands from Home Assistant."""
+        """Handles incoming commands AND Nuke scanning."""
         try:
+            # 1. Handle Nuke Button Press
             if msg.topic == self.nuke_command_topic:
                 self._handle_nuke_press()
+                return
+
+            # 2. Handle Nuke Scanning (Search & Destroy)
+            if self.is_nuking:
+                # If we get an empty payload, it's likely a deletion we just did. Ignore.
+                if not msg.payload: return
+
+                try:
+                    # Decode payload to check if it's one of ours
+                    payload_str = msg.payload.decode("utf-8")
+                    data = json.loads(payload_str)
+                    
+                    # Check Manufacturer Signature
+                    device_info = data.get("device", {})
+                    manufacturer = device_info.get("manufacturer", "")
+
+                    if "rtl-haos" in manufacturer:
+                        # SAFETY: Don't delete the Nuke button itself!
+                        if "nuke" in msg.topic or "rtl_bridge_nuke" in str(msg.topic):
+                            return
+
+                        print(f"[NUKE] FOUND & DELETING: {msg.topic}")
+                        # Send empty payload to delete entity from HA
+                        self.client.publish(msg.topic, "", retain=True)
+                except Exception:
+                    # Not JSON or irrelevant message
+                    pass
+
         except Exception as e:
             print(f"[MQTT] Error handling message: {e}")
 
@@ -82,15 +111,12 @@ class HomeNodeMQTT:
             "availability_topic": self.TOPIC_AVAILABILITY
         }
         
-        # Publish to the 'button' domain
         config_topic = f"homeassistant/button/{unique_id}/config"
         self.client.publish(config_topic, json.dumps(payload), retain=True)
 
     def _handle_nuke_press(self):
         """Counts presses and triggers Nuke if threshold met."""
         now = time.time()
-        
-        # Reset if too much time passed
         if now - self.nuke_last_press > self.NUKE_TIMEOUT:
             self.nuke_counter = 0
         
@@ -100,43 +126,41 @@ class HomeNodeMQTT:
         remaining = self.NUKE_THRESHOLD - self.nuke_counter
         
         if remaining > 0:
-            print(f"[NUKE] WARNING: Press {remaining} more times to DELETE ALL ENTITIES.")
+            print(f"[NUKE] ARMED: Press {remaining} more times to DESTROY ALL ENTITIES.")
         else:
             self.nuke_all()
             self.nuke_counter = 0
 
     def nuke_all(self):
-        """Deletes all known entities from Home Assistant and clears memory."""
-        print("\n" + "!"*40)
-        print("[NUKE] DETONATED! Clearing all discovered entities...")
-        print("!"*40 + "\n")
+        """Activates the Search-and-Destroy protocol."""
+        print("\n" + "!"*50)
+        print("[NUKE] DETONATED! Scanning MQTT for 'rtl-haos' devices...")
+        print("!"*50 + "\n")
         
+        self.is_nuking = True
+        
+        # Subscribe to ALL Home Assistant config topics (Wildcard)
+        # This catches 'sensor', 'binary_sensor', 'button', etc.
+        self.client.subscribe("homeassistant/+/+/config")
+        
+        # Schedule the scan to stop in 5 seconds
+        threading.Timer(5.0, self._stop_nuke_scan).start()
+
+    def _stop_nuke_scan(self):
+        """Stops the scanning process and resets state."""
+        self.is_nuking = False
+        self.client.unsubscribe("homeassistant/+/+/config")
+        
+        # Clear internal memory too
         with self.discovery_lock:
-            count = 0
-            for unique_id in list(self.discovery_published):
-                # Skip the Nuke button itself (we want to keep that!)
-                if "rtl_bridge_nuke" in unique_id:
-                    continue
-                
-                # Construct the config topic used for discovery
-                # NOTE: This assumes 'sensor' domain as used in _publish_discovery.
-                # If you use other domains, this needs to check them too.
-                topic = f"homeassistant/sensor/{unique_id}/config"
-                
-                # Sending an empty payload removes the entity from HA
-                self.client.publish(topic, "", retain=True)
-                count += 1
-            
-            # Clear internal memory
             self.discovery_published.clear()
             self.last_sent_values.clear()
             self.tracked_devices.clear()
-            
-            print(f"[NUKE] Cleared {count} entities.")
-            
-            # Re-publish the Nuke button immediately so it stays available
-            # (We cleared discovery_published, so we must assume it's gone from our memory)
-            self._publish_nuke_button()
+
+        print(f"[NUKE] Scan Complete. All identified entities removed.")
+        
+        # Re-publish the Nuke button immediately so it doesn't disappear
+        self._publish_nuke_button()
 
     def start(self):
         print(f"[STARTUP] Connecting to MQTT Broker at {config.MQTT_SETTINGS['host']}...")
@@ -161,7 +185,6 @@ class HomeNodeMQTT:
 
             default_meta = (None, "none", "mdi:eye", sensor_name.replace("_", " ").title())
             
-            # --- 1. METADATA LOOKUP (Get Icon/Unit/Class) ---
             if sensor_name.startswith("radio_status"):
                 base_meta = FIELD_META.get("radio_status", default_meta)
                 unit, device_class, icon, default_fname = base_meta
@@ -172,7 +195,6 @@ class HomeNodeMQTT:
                 except ValueError:
                     unit, device_class, icon, default_fname = default_meta
 
-            # --- 2. FRIENDLY NAME LOGIC ---
             if friendly_name_override:
                 friendly_name = friendly_name_override
             elif sensor_name.startswith("radio_status_"):
@@ -181,7 +203,6 @@ class HomeNodeMQTT:
             else:
                 friendly_name = default_fname
 
-            # --- 3. CATEGORIZATION LOGIC ---
             entity_cat = "diagnostic"
             if sensor_name in getattr(config, 'MAIN_SENSORS', []):
                 entity_cat = None 
@@ -221,10 +242,6 @@ class HomeNodeMQTT:
             self.discovery_published.add(unique_id)
 
     def send_sensor(self, sensor_id, field, value, device_name, device_model, is_rtl=True, friendly_name=None):
-        """
-        Sends a sensor update.
-        optional: friendly_name (str) - Overrides the default naming logic.
-        """
         if value is None: return
 
         self.tracked_devices.add(device_name)
