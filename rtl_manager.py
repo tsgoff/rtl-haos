@@ -4,7 +4,7 @@ DESCRIPTION:
   Manages the 'rtl_433' subprocess interactions.
   - rtl_loop(): The main thread that reads stdout from rtl_433.
   - discover_rtl_devices(): Auto-detects MULTIPLE USB sticks.
-  - UPDATED: Now prefers Device Index (-d 0) over Serial (-d :102) for stability.
+  - UPDATED: Now warns if frequency looks like it's missing 'M' (e.g. 915 vs 915M).
 """
 import subprocess
 import json
@@ -80,17 +80,15 @@ def discover_rtl_devices():
             devices.append({
                 "name": f"RTL_{serial}",
                 "id": serial,
-                "index": index  # <--- SAVE THE INDEX
+                "index": index 
             })
         else:
-            # Device exists but serial couldn't be read?
-            # Assume valid if exit code 0
             if proc.returncode == 0:
                 fallback_id = str(index)
                 devices.append({
                     "name": f"RTL_Index_{index}", 
                     "id": fallback_id,
-                    "index": index # <--- SAVE THE INDEX
+                    "index": index
                 })
 
         index += 1
@@ -103,7 +101,7 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
     Parses JSON output and passes it to data_processor.dispatch_reading().
     """
     device_id = radio_config.get("id")
-    device_index = radio_config.get("index") # <--- RETRIEVE INDEX
+    device_index = radio_config.get("index")
     
     naming_id = device_id if device_id else "0"
 
@@ -119,6 +117,24 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
     else:
         frequencies = [f.strip() for f in str(raw_freq).split(",")]
 
+    # --- NEW: SAFETY CHECK FOR UNITS ---
+    for f in frequencies:
+        # Check if it looks like a plain number (no M/k/Hz characters)
+        # We strip '.' to handle floats like "433.92"
+        if f.replace('.', '', 1).isdigit():
+             try:
+                 val = float(f)
+                 # If < 24 million, it's likely Hz (24MHz is usually min for RTL-SDR)
+                 if val < 24000000:
+                     print(f"[{radio_name}] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                     print(f"[{radio_name}] WARNING: Frequency '{f}' has no units!")
+                     print(f"[{radio_name}] It will be read as {f} Hz (likely invalid).")
+                     print(f"[{radio_name}] Did you mean '{f}M'?")
+                     print(f"[{radio_name}] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+             except ValueError:
+                 pass
+    # -----------------------------------
+
     # 2. Hop Interval
     hop_interval = radio_config.get("hop_interval")
 
@@ -128,8 +144,7 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
 
     cmd = ["rtl_433"]
     
-    # --- UPDATED SELECTION LOGIC ---
-    # Prioritize Index (-d 0) if known, as it is more robust than Serial (-d :102)
+    # Prioritize Index (-d 0) if known
     if device_index is not None:
         cmd.extend(["-d", str(device_index)])
         print(f"[{radio_name}] Selecting by Index: {device_index}")
@@ -152,7 +167,6 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
     print(f"[RTL] Manager started for {radio_name}. Freqs: {frequencies}")
 
     while True:
-        # Announce Scanning
         mqtt_handler.send_sensor(
             sys_id, status_field, "Scanning...", sys_name, sys_model, 
             is_rtl=True, friendly_name=status_friendly_name
@@ -193,7 +207,6 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                     except:
                         continue
 
-                    # --- SENSOR PROCESSING ---
                     model = data.get("model", "Generic")
                     sid = data.get("id") or data.get("channel") or "unknown"
                     clean_id = clean_mac(sid)
