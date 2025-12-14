@@ -8,8 +8,6 @@ DESCRIPTION:
   - Starts Data Processor (Throttling).
   - Starts RTL Managers (Radios).
   - Starts System Monitor.
-  - UPDATED: Maps Manual Config Serial Numbers to Physical Indices.
-  - UPDATED: Logo is now Blue.
 """
 import builtins
 from datetime import datetime
@@ -22,9 +20,9 @@ import os
 
 # --- 1. GLOBAL LOGGING & COLOR SETUP ---
 # Standard ANSI Colors for HAOS
-c_blue = "\033[1;34m"  # Bold Blue
-c_green = "\033[32m"
-c_yellow = "\033[33m"
+c_blue = "\033[1;34m"    # Bold Blue (Logo)
+c_purple = "\033[1;35m"  # Bold Purple (Subtitle)
+c_green = "\033[32m"     # Green (INFO tag)
 c_reset = "\033[0m"
 
 _original_print = builtins.print
@@ -86,7 +84,7 @@ def get_version():
     return "Unknown"
 
 def show_logo(version):
-    """Prints the ASCII logo forced to Blue using sys.stdout to bypass filters."""
+    """Prints the ASCII logo (Blue) and Subtitle (Purple) using sys.stdout."""
     logo = r"""
   ____  _____  _         _   _    _    ___  ____  
  |  _ \|_   _|| |       | | | |  / \  / _ \/ ___| 
@@ -98,7 +96,7 @@ def show_logo(version):
     # We construct the whole block with color codes
     banner = (
         f"{c_blue}{logo}{c_reset}\n"
-        f"   {c_blue}>>> RTL-SDR Bridge for Home Assistant ({version}) <<<{c_reset}\n"
+        f"   {c_purple}>>> RTL-SDR Bridge for Home Assistant ({version}) <<<{c_reset}\n"
         f"   --------------------------------------------------\n"
     )
     
