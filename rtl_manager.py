@@ -4,7 +4,7 @@ DESCRIPTION:
   Manages the 'rtl_433' subprocess interactions.
   - rtl_loop(): The main thread that reads stdout from rtl_433.
   - discover_rtl_devices(): Auto-detects MULTIPLE USB sticks.
-  - UPDATED: Status now uses "Last: HH:MM:SS" for better clarity.
+  - UPDATED: Now respects the 'rtl_show_timestamps' configuration toggle.
 """
 import subprocess
 import json
@@ -231,17 +231,27 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                     now = time.time()
                     state["last_packet"] = now
                     
-                    # Update Sensor to Timestamp (Throttle: 5s)
-                    if now - state["last_mqtt_update"] > 5:
-                        state["last_mqtt_update"] = now
-                        ts = datetime.now().strftime("%H:%M:%S")
-                        display_str = f"Last: {ts}"  # <--- CHANGED HERE
-                        
-                        state["current_display"] = display_str
-                        mqtt_handler.send_sensor(
-                            sys_id, status_field, display_str, sys_name, sys_model, 
-                            is_rtl=True, friendly_name=status_friendly_name
-                        )
+                    # --- TOGGLEABLE BEHAVIOR ---
+                    if config.RTL_SHOW_TIMESTAMPS:
+                        # OPTION A: Show "Last: HH:MM:SS"
+                        if now - state["last_mqtt_update"] > 5:
+                            state["last_mqtt_update"] = now
+                            ts = datetime.now().strftime("%H:%M:%S")
+                            display_str = f"Last: {ts}"
+                            
+                            state["current_display"] = display_str
+                            mqtt_handler.send_sensor(
+                                sys_id, status_field, display_str, sys_name, sys_model, 
+                                is_rtl=True, friendly_name=status_friendly_name
+                            )
+                    else:
+                        # OPTION B: Show "Online" (Cleaner)
+                        if state["current_display"] != "Online":
+                            state["current_display"] = "Online"
+                            mqtt_handler.send_sensor(
+                                sys_id, status_field, "Online", sys_name, sys_model, 
+                                is_rtl=True, friendly_name=status_friendly_name
+                            )
 
                     try:
                         data = json.loads(safe_line)

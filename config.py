@@ -4,7 +4,6 @@ import json
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# This acts as the bridge between Home Assistant's UI and your Python script.
 OPTIONS_PATH = "/data/options.json"
 if os.path.exists(OPTIONS_PATH):
     try:
@@ -12,25 +11,16 @@ if os.path.exists(OPTIONS_PATH):
             options = json.load(f)
             for key, value in options.items():
                 env_key = key.upper()
-                
-                # 1. Handle Lists/Dicts (Serialize to JSON)
                 if isinstance(value, (list, dict)):
                     os.environ[env_key] = json.dumps(value)
-                
-                # 2. Handle standard values (Skip if None/Empty)
-                #    This ensures we don't load "None" as a string if the user clears the box
                 elif value is not None and str(value).strip():
                     os.environ[env_key] = str(value)
-
         print(f"[CONFIG] Success! Loaded settings from Home Assistant.")
     except Exception as e:
         print(f"[CONFIG] Error loading options: {e}")
 
-
-
 class Settings(BaseSettings):
     """Main application settings."""
-
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -38,139 +28,60 @@ class Settings(BaseSettings):
     )
 
     # MQTT Settings
-    mqtt_host: str = Field(
-        default="localhost", description="MQTT broker hostname or IP"
-    )
-    mqtt_port: int = Field(default=1883, description="MQTT broker port")
-    mqtt_user: str = Field(default="", description="MQTT username")
-    mqtt_pass: str = Field(default="", description="MQTT password")
-    mqtt_keepalive: int = Field(
-        default=60, description="MQTT keepalive interval in seconds"
-    )
+    mqtt_host: str = Field(default="localhost")
+    mqtt_port: int = Field(default=1883)
+    mqtt_user: str = Field(default="")
+    mqtt_pass: str = Field(default="")
+    mqtt_keepalive: int = Field(default=60)
 
     # --- RTL-SDR Configuration ---
-    
-    # 1. Advanced: List of specific radio configurations (JSON/List of Dicts)
-    # Example: [{"id": "0", "freq": "433.92M, 315M", "hop_interval": 60}]
-    rtl_config: list[dict] = Field(
-        default_factory=list, description="List of RTL-SDR radio configurations"
+    rtl_config: list[dict] = Field(default_factory=list)
+    rtl_default_freq: str = Field(default="433.92M")
+    rtl_default_hop_interval: int = Field(default=60)
+    rtl_default_rate: str = Field(default="250k")
+
+    bridge_id: str = Field(default="42")
+    bridge_name: str = Field(default="rtl-haos-bridge")
+
+    # --- NEW: TOGGLE FOR TIMESTAMPS ---
+    rtl_show_timestamps: bool = Field(
+        default=True, 
+        description="If True, shows 'Last: HH:MM:SS'. If False, shows 'Online'."
     )
 
-    # 2. Simple: Defaults for Auto-Detection (Used if rtl_config is empty)
-    rtl_default_freq: str = Field(
-        default="433.92M",
-        description="Default frequency or comma-separated list (e.g. '433.92M, 315M')"
-    )
-    rtl_default_hop_interval: int = Field(
-        default=60,
-        description="Hop interval in seconds. Only active if multiple frequencies are set."
-    )
+    skip_keys: list[str] = Field(default_factory=lambda: ["time", "protocol", "mod", "id"])
+    device_blacklist: list[str] = Field(default_factory=lambda: ["SimpliSafe*", "EezTire*"])
+    device_whitelist: list[str] = Field(default_factory=list)
 
-    rtl_default_rate: str = Field(
-        default="250k",
-        description="Sample rate (e.g. 250k, 1024k, 2048k)"
-    )
-
-    bridge_id: str = Field(
-        default="42", 
-        description="Static unique ID for the bridge"
-    )
-
-    # Friendly Display Name
-    bridge_name: str = Field(
-        default="rtl-haos-bridge", 
-        description="The friendly name shown in Home Assistant"
-    )
-
-    # Keys to skip when publishing sensor data
-    skip_keys: list[str] = Field(
-        default_factory=lambda: ["time", "protocol", "mod", "id"],
-        description="Keys to skip when publishing",
-    )
-
-    # Device filtering
-    device_blacklist: list[str] = Field(
-        default_factory=lambda: ["SimpliSafe*", "EezTire*"],
-        description="Device patterns to block",
-    )
-    device_whitelist: list[str] = Field(
-        default_factory=list,
-        description="If non-empty, only these device patterns are allowed",
-    )
-
-    # Main sensors (shown in main panel vs diagnostics)
     main_sensors: list[str] = Field(
         default_factory=lambda: [
-            "sys_device_count",
-            "temperature",
-            "temperature_C",
-            "temperature_F",
-            "dew_point",
-            "humidity",
-            "pressure_hpa",
-            "pressure_inhg",
-            "pressure_PSI",
-            "co2",
-            "mics_ratio",
-            "mq2_ratio",
-            "mag_uT",
-            "geomag_index",
-            "wind_avg_km_h",
-            "wind_avg_mi_h",
-            "wind_gust_km_h",
-            "wind_gust_mi_h",
-            "wind_dir_deg",
-            "wind_dir",
-            "rain_mm",
-            "rain_in",
-            "rain_rate_mm_h",
-            "rain_rate_in_h",
-            "lux",
-            "uv",
-            "strikes",
-            "strike_distance",
-            "storm_dist",
-            "Consumption",
-            "consumption",
-            "meter_reading",
-        ],
-        description="Sensors shown in main panel (not diagnostics)",
+            "sys_device_count", "temperature", "temperature_C", "temperature_F",
+            "dew_point", "humidity", "pressure_hpa", "pressure_inhg",
+            "pressure_PSI", "co2", "mics_ratio", "mq2_ratio", "mag_uT",
+            "geomag_index", "wind_avg_km_h", "wind_avg_mi_h",
+            "wind_gust_km_h", "wind_gust_mi_h", "wind_dir_deg", "wind_dir",
+            "rain_mm", "rain_in", "rain_rate_mm_h", "rain_rate_in_h",
+            "lux", "uv", "strikes", "strike_distance", "storm_dist",
+            "Consumption", "consumption", "meter_reading",
+        ]
     )
 
-    # Publishing settings
-    rtl_expire_after: int = Field(
-        default=600, description="expire_after in seconds for HA sensor entities"
-    )
-    force_new_ids: bool = Field(
-        default=False, description="Force new unique_ids by adding suffix"
-    )
-    debug_raw_json: bool = Field(
-        default=False, description="Print raw rtl_433 JSON to stdout"
-    )
-
-    # Throttle/averaging
-    rtl_throttle_interval: int = Field(
-        default=30, description="Seconds to buffer data before sending (0=realtime)"
-    )
+    rtl_expire_after: int = Field(default=600)
+    force_new_ids: bool = Field(default=False)
+    debug_raw_json: bool = Field(default=False)
+    rtl_throttle_interval: int = Field(default=30)
 
     @property
     def id_suffix(self) -> str:
-        """Returns ID suffix based on force_new_ids setting."""
         return "_v2" if self.force_new_ids else ""
 
-
-# Global settings instance
 settings = Settings()
 
 BRIDGE_ID = settings.bridge_id
 BRIDGE_NAME = settings.bridge_name
-
-# Convenience aliases for backward compatibility
 MQTT_SETTINGS = {
-    "host": settings.mqtt_host,
-    "port": settings.mqtt_port,
-    "user": settings.mqtt_user,
-    "pass": settings.mqtt_pass,
+    "host": settings.mqtt_host, "port": settings.mqtt_port,
+    "user": settings.mqtt_user, "pass": settings.mqtt_pass,
     "keepalive": settings.mqtt_keepalive,
 }
 RTL_CONFIG = settings.rtl_config
@@ -184,7 +95,8 @@ ID_SUFFIX = settings.id_suffix
 DEBUG_RAW_JSON = settings.debug_raw_json
 RTL_THROTTLE_INTERVAL = settings.rtl_throttle_interval
 
-# EXPORT NEW DEFAULTS
 RTL_DEFAULT_FREQ = settings.rtl_default_freq
 RTL_DEFAULT_HOP_INTERVAL = settings.rtl_default_hop_interval
 RTL_DEFAULT_RATE = settings.rtl_default_rate
+# EXPORT THE NEW SETTING
+RTL_SHOW_TIMESTAMPS = settings.rtl_show_timestamps
