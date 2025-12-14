@@ -90,24 +90,11 @@ def show_logo(version):
         r" |  _ <  | |  | | |___| |  _  |/ ___ \ |_| |___) |",
         r" |_| \_\ |_|  |_____|   |_| |_/_/   \_\___/|____/ "
     ]
-    
-    # 1. Print Logo: Apply Blue to EACH line individually
     for line in logo_lines:
         sys.stdout.write(f"{c_blue}{line}{c_reset}\n")
-    
-    # 2. SPACER (Between Logo and Text)
     sys.stdout.write("\n")
-    
-    # 3. Print Subtitle: Purple
     sys.stdout.write(f"   {c_purple}>>> RTL-SDR Bridge for Home Assistant ({version}) <<<{c_reset}\n")
-    
-    # 4. Print Separator
-    sys.stdout.write("   --------------------------------------------------\n")
-    
-    # 5. Bottom Spacer (before logs start)
     sys.stdout.write("\n")
-    
-    # 6. Force Flush
     sys.stdout.flush()
 
 def main():

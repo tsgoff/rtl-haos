@@ -1,5 +1,5 @@
 # Changelog
-## v1.1.0
+## v1.1
 - **FIX:** Hop mode works with rtl-sdr autodetect (no id
 - **NEW:** Improved management of multiple radios)
 - **NEW:** Add-on icon
