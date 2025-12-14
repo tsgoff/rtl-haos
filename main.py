@@ -8,22 +8,30 @@ DESCRIPTION:
   - Starts Data Processor (Throttling).
   - Starts RTL Managers (Radios).
   - Starts System Monitor.
+  - UPDATED: Maps Manual Config Serial Numbers to Physical Indices.
+  - UPDATED: Forces Hex ANSI codes for Blue Logo.
 """
+import os
+import sys
+
+# --- 0. FORCE COLOR ENVIRONMENT ---
+# We force these before any other imports to ensure libraries see them.
+os.environ["TERM"] = "xterm-256color"
+os.environ["CLICOLOR_FORCE"] = "1"
+
 import builtins
 from datetime import datetime
-import sys
 import threading
 import time
 import importlib.util
 import subprocess
-import os
 
 # --- 1. GLOBAL LOGGING & COLOR SETUP ---
-# Standard ANSI Colors for HAOS
-c_blue = "\033[1;34m"    # Bold Blue (Logo)
-c_purple = "\033[1;35m"  # Bold Purple (Subtitle)
-c_green = "\033[32m"     # Green (INFO tag)
-c_reset = "\033[0m"
+# using Hex \x1b is often more reliable in Docker logs than Octal \033
+c_blue   = "\x1b[34m"    # Standard Blue
+c_purple = "\x1b[35m"    # Standard Purple
+c_green  = "\x1b[32m"    # Standard Green
+c_reset  = "\x1b[0m"
 
 _original_print = builtins.print
 
@@ -38,10 +46,10 @@ def timestamped_print(*args, **kwargs):
     # Construct the prefix with color
     prefix = f"[{now}] {c_green}INFO:{c_reset}"
     
-    # Convert all args to string to avoid format errors
+    # Convert all args to string
     msg = " ".join(map(str, args))
     
-    # Use original print, flushing immediately
+    # Force flush=True
     _original_print(f"{prefix} {msg}", flush=True, **kwargs)
 
 # Override the built-in print
@@ -84,24 +92,26 @@ def get_version():
     return "Unknown"
 
 def show_logo(version):
-    """Prints the ASCII logo (Blue) and Subtitle (Purple) using sys.stdout."""
-    logo = r"""
-  ____  _____  _         _   _    _    ___  ____  
- |  _ \|_   _|| |       | | | |  / \  / _ \/ ___| 
- | |_) | | |  | |  ___  | |_| | / _ \| | | \___ \ 
- |  _ <  | |  | | |___| |  _  |/ ___ \ |_| |___) |
- |_| \_\ |_|  |_____|   |_| |_/_/   \_\___/|____/ 
-    """
+    """Prints the ASCII logo (Blue) and Subtitle (Purple) using direct write."""
+    # We define the raw string
+    logo_lines = [
+        r"  ____  _____  _         _   _    _    ___  ____  ",
+        r" |  _ \|_   _|| |       | | | |  / \  / _ \/ ___| ",
+        r" | |_) | | |  | |  ___  | |_| | / _ \| | | \___ \ ",
+        r" |  _ <  | |  | | |___| |  _  |/ ___ \ |_| |___) |",
+        r" |_| \_\ |_|  |_____|   |_| |_/_/   \_\___/|____/ "
+    ]
     
-    # We construct the whole block with color codes
-    banner = (
-        f"{c_blue}{logo}{c_reset}\n"
-        f"   {c_purple}>>> RTL-SDR Bridge for Home Assistant ({version}) <<<{c_reset}\n"
-        f"   --------------------------------------------------\n"
-    )
+    # 1. Print the Logo in Blue
+    # We join it first, then apply color to the whole block
+    logo_block = "\n".join(logo_lines)
+    sys.stdout.write(f"{c_blue}{logo_block}{c_reset}\n")
     
-    # Write directly to stdout buffer to ensure color isn't stripped by 'print'
-    sys.stdout.write(banner)
+    # 2. Print the Subtitle in Purple
+    sys.stdout.write(f"   {c_purple}>>> RTL-SDR Bridge for Home Assistant ({version}) <<<{c_reset}\n")
+    sys.stdout.write("   --------------------------------------------------\n")
+    
+    # 3. Force Flush
     sys.stdout.flush()
 
 def main():
