@@ -353,7 +353,7 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                 is_rtl=True, 
                 friendly_name=status_friendly_name
             )
-            time.sleep(2)
+            time.sleep(10)  # <--- INCREASED to 10 seconds for visibility
         else:
             print(f"[{radio_name}] Retrying in 30 seconds...")
             time.sleep(30)
