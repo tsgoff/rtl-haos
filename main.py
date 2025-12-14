@@ -8,7 +8,7 @@ DESCRIPTION:
   - Starts Data Processor (Throttling).
   - Starts RTL Managers (Radios).
   - Starts System Monitor.
-  - UPDATED: Smart Logging (Switches to Yellow WARNING if detected).
+  - UPDATED: Smart Logging (Removes duplicate tags and ignores JSON keys).
 """
 import os
 import sys
@@ -25,7 +25,6 @@ import importlib.util
 import subprocess
 
 # --- 1. GLOBAL LOGGING & COLOR SETUP ---
-# Hex codes \x1b are safer for Docker logs
 c_blue   = "\x1b[34m"    # Standard Blue
 c_purple = "\x1b[35m"    # Standard Purple
 c_green  = "\x1b[32m"    # Standard Green
@@ -37,20 +36,36 @@ _original_print = builtins.print
 
 def timestamped_print(*args, **kwargs):
     """
-    Replica of HAOS Logging format with Level Detection:
-    - If message contains "warning", uses Yellow WARNING: tag.
-    - If message contains "critical" or "error", uses Red WARNING: tag.
-    - Otherwise, uses Green INFO: tag.
+    Smart Logging with Cleanup:
+    1. Detects Level (Debug/Error/Warning/Info).
+    2. Sets Color.
+    3. REMOVES the trigger word from the message to avoid duplicates.
     """
     now = datetime.now().strftime("%H:%M:%S")
     msg = " ".join(map(str, args))
     lower_msg = msg.lower()
     
-    # Determine Color/Tag based on content
-    if "warning" in lower_msg:
+    # 1. DEBUG CHECK (Highest Priority)
+    # Detects "[DEBUG]" tag from rtl_manager
+    if "debug" in lower_msg:
+        prefix = f"[{now}] {c_blue}DEBUG:{c_reset}"
+        # Clean the tag out so it doesn't print twice
+        msg = msg.replace("[DEBUG]", "").replace("[debug]", "").strip()
+
+    # 2. ERROR CHECK
+    # Removed "exception" because it appears in valid JSON (e.g. "exception": 0)
+    elif any(x in lower_msg for x in ["error", "critical", "failed", "crashed"]):
+        prefix = f"[{now}] {c_red}ERROR:{c_reset}"
+        # Clean common error tags
+        msg = msg.replace("CRITICAL:", "").replace("ERROR:", "").strip()
+        
+    # 3. WARNING CHECK
+    elif "warning" in lower_msg:
         prefix = f"[{now}] {c_yellow}WARNING:{c_reset}"
-    elif "critical" in lower_msg or "error" in lower_msg or "failed" in lower_msg or "crashed" in lower_msg:
-        prefix = f"[{now}] {c_red}WARNING:{c_reset}"
+        # Clean the tag
+        msg = msg.replace("WARNING:", "").strip()
+        
+    # 4. INFO CHECK (Default)
     else:
         prefix = f"[{now}] {c_green}INFO:{c_reset}"
     

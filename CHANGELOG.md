@@ -1,7 +1,9 @@
 # Changelog
 ## v1.1
+
 - **FIX:** Hop mode works with rtl-sdr autodetect (no id
 - **NEW:** Improved management of multiple radios)
+- **NEW:** Color log with colors for WARNING, ERROR, INFO, DEBUG
 - **NEW:** Add-on icon
 -  **NEW:** Added button to reset radios
 ## v1.0.34

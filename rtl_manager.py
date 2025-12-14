@@ -2,8 +2,7 @@
 FILE: rtl_manager.py
 DESCRIPTION:
   Manages the 'rtl_433' subprocess interactions.
-  - UPDATED: Added trigger_radio_restart() and process tracking.
-  - UPDATED: Added 'WARNING' keyword to errors to trigger Yellow logs.
+  - UPDATED: Raw JSON output now tagged with [DEBUG] for Blue logs.
 """
 import subprocess
 import json
@@ -138,7 +137,6 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
              try:
                  val = float(f)
                  if val < 24000000:
-                     # 'WARNING:' triggers the yellow tag in main.py
                      print(f"[{radio_name}] WARNING: Frequency '{f}' has no units! Did you mean '{f}M'?")
              except ValueError:
                  pass
@@ -277,8 +275,9 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                     else:
                         if is_blocked_device(clean_id, model): continue
 
+                    # --- UPDATED: Add [DEBUG] tag to raw output ---
                     if getattr(config, "DEBUG_RAW_JSON", False):
-                        print(f"[{radio_name}] RX: {safe_line}")
+                        print(f"[DEBUG] [{radio_name}] RX: {safe_line}")
 
                     if "Neptune-R900" in model and data.get("consumption") is not None:
                         real_val = float(data["consumption"]) / 10.0
@@ -325,7 +324,6 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
             if proc.returncode != 0 and proc.returncode != -15:
                 state["current_display"] = "Crashed"
                 error_msg = f"Crashed: {last_log_line}" if last_log_line else f"Crashed Code {proc.returncode}"
-                # Added WARNING tag for detection
                 print(f"[{radio_name}] WARNING: Process exited with code {proc.returncode}")
                 mqtt_handler.send_sensor(
                     sys_id, status_field, error_msg[:255], sys_name, sys_model, 
