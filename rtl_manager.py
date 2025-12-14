@@ -4,15 +4,15 @@ DESCRIPTION:
   Manages the 'rtl_433' subprocess interactions.
   - rtl_loop(): The main thread that reads stdout from rtl_433.
   - discover_rtl_devices(): Auto-detects MULTIPLE USB sticks.
-  - UPDATED: Adds "Last Signal" timestamp sensor.
-  - UPDATED: Adds "Idle" status if no signal received for 60 seconds.
-  """
+  - UPDATED: Consolidated Status Sensor. 
+             Shows "Scanning..." -> Timestamp -> "Scanning..." (if silent > 10m).
+"""
 import subprocess
 import json
 import time
 import fnmatch
 import threading
-from datetime import datetime  # <--- NEW IMPORT
+from datetime import datetime
 import config
 from utils import clean_mac, calculate_dew_point
 
@@ -139,14 +139,11 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
     hop_interval = radio_config.get("hop_interval")
 
     status_field = f"radio_status_{naming_id}"
-    last_signal_field = f"radio_last_signal_{naming_id}"
-    
     status_friendly_name = f"{radio_name}"
     sys_name = f"{sys_model} ({sys_id})"
 
     cmd = ["rtl_433"]
     
-    # Prioritize Index (-d 0) if known
     if device_index is not None:
         cmd.extend(["-d", str(device_index)])
         print(f"[{radio_name}] Selecting by Index: {device_index}")
@@ -168,36 +165,36 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
 
     print(f"[RTL] Manager started for {radio_name}. Freqs: {frequencies}")
 
-    # --- SHARED STATE FOR WATCHDOG ---
+    # --- SHARED STATE ---
     state = {
         "last_packet": time.time(),
-        "last_mqtt_update": 0,
-        "status": "Scanning..."
+        "current_display": "Scanning...",
+        "last_mqtt_update": 0
     }
 
-    # --- IDLE WATCHDOG THREAD ---
+    # --- WATCHDOG (10 MINUTE TIMEOUT) ---
     def watchdog_loop():
-        """Checks periodically if we haven't heard anything."""
+        """Checks if radio is silent for > 600s (10 mins)."""
         while True:
-            time.sleep(10) # Check every 10 seconds
+            time.sleep(10)
             
-            # Timeout Threshold: 60 Seconds
             time_since_last = time.time() - state["last_packet"]
             
-            if time_since_last > 60 and state["status"] == "Online":
-                state["status"] = "Idle"
+            # If silent > 10 mins AND not already showing 'Scanning...'
+            if time_since_last > 600 and state["current_display"] != "Scanning...":
+                state["current_display"] = "Scanning..."
                 mqtt_handler.send_sensor(
-                    sys_id, status_field, "Idle", sys_name, sys_model, 
+                    sys_id, status_field, "Scanning...", sys_name, sys_model, 
                     is_rtl=True, friendly_name=status_friendly_name
                 )
-                print(f"[{radio_name}] Status set to Idle (No signal for 60s)")
+                print(f"[{radio_name}] Status reverted to Scanning... (No signal for 10m)")
 
     threading.Thread(target=watchdog_loop, daemon=True).start()
     # ---------------------------------------
 
     while True:
-        # Reset Status on Loop Start
-        state["status"] = "Scanning..."
+        # Reset on Loop Start
+        state["current_display"] = "Scanning..."
         mqtt_handler.send_sensor(
             sys_id, status_field, "Scanning...", sys_name, sys_model, 
             is_rtl=True, friendly_name=status_friendly_name
@@ -216,17 +213,17 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
 
                 if "usb_open error" in safe_line or "No supported devices" in safe_line or "No matching device" in safe_line:
                     print(f"[{radio_name}] Hardware missing!")
-                    state["status"] = "Error"
+                    state["current_display"] = "No Device"
                     mqtt_handler.send_sensor(
-                        sys_id, status_field, "No Device Found", sys_name, sys_model, 
+                        sys_id, status_field, "No Device", sys_name, sys_model, 
                         is_rtl=True, friendly_name=status_friendly_name
                     )
                 
                 elif "Kernel driver is active" in safe_line or "LIBUSB_ERROR_BUSY" in safe_line:
                     print(f"[{radio_name}] USB Busy/Driver Error!")
-                    state["status"] = "Error"
+                    state["current_display"] = "USB Error"
                     mqtt_handler.send_sensor(
-                        sys_id, status_field, "Error: USB Busy", sys_name, sys_model, 
+                        sys_id, status_field, "USB Error", sys_name, sys_model, 
                         is_rtl=True, friendly_name=status_friendly_name
                     )
 
@@ -235,21 +232,15 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                     now = time.time()
                     state["last_packet"] = now
                     
-                    # 1. Update Status (Only if changed)
-                    if state["status"] != "Online":
-                        state["status"] = "Online"
-                        mqtt_handler.send_sensor(
-                            sys_id, status_field, "Online", sys_name, sys_model, 
-                            is_rtl=True, friendly_name=status_friendly_name
-                        )
-
-                    # 2. Update Timestamp (Throttled to every 5s)
+                    # Update Sensor to Timestamp (Throttle: 5s)
                     if now - state["last_mqtt_update"] > 5:
                         state["last_mqtt_update"] = now
                         ts = datetime.now().strftime("%H:%M:%S")
+                        
+                        state["current_display"] = ts
                         mqtt_handler.send_sensor(
-                            sys_id, last_signal_field, ts, sys_name, sys_model, 
-                            is_rtl=True, friendly_name=f"{radio_name} Last Signal"
+                            sys_id, status_field, ts, sys_name, sys_model, 
+                            is_rtl=True, friendly_name=status_friendly_name
                         )
 
                     try:
@@ -315,7 +306,7 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
 
             if proc: proc.wait()
             if proc.returncode != 0:
-                state["status"] = "Crashed"
+                state["current_display"] = "Crashed"
                 error_msg = f"Crashed: {last_log_line}" if last_log_line else f"Crashed Code {proc.returncode}"
                 print(f"[{radio_name}] Process exited with code {proc.returncode}")
                 mqtt_handler.send_sensor(
@@ -324,7 +315,7 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                 )
 
         except Exception as e:
-            state["status"] = "Crashed"
+            state["current_display"] = "Crashed"
             print(f"[{radio_name}] Exception: {e}")
             mqtt_handler.send_sensor(
                 sys_id, status_field, "Script Error", sys_name, sys_model, 
