@@ -37,38 +37,61 @@ def is_blocked_device(clean_id: str, model: str) -> bool:
         if fnmatch.fnmatch(str(model), pattern): return True
     return False
 
-def discover_default_rtl_serial():
-    """Attempts to read the serial number of the first connected RTL-SDR."""
-    try:
-        proc = subprocess.run(
-            ["rtl_eeprom"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except FileNotFoundError:
-        print("[STARTUP] rtl_eeprom not found; cannot auto-detect RTL-SDR serial.")
-        return None
-    except Exception as e:
-        print(f"[STARTUP] Error running rtl_eeprom: {e}")
-        return None
+def discover_rtl_devices():
+    """
+    Scans for ALL connected RTL-SDR devices by iterating indices (0, 1, 2...).
+    Returns a list of dicts: [{'id': '102', 'name': 'RTL_102'}, ...]
+    """
+    devices = []
+    index = 0
+    
+    while index < 8: # Limit to 8 devices to prevent infinite loops
+        try:
+            # explicit -d {index} to check specific slot
+            proc = subprocess.run(
+                ["rtl_eeprom", "-d", str(index)],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except FileNotFoundError:
+            print("[STARTUP] rtl_eeprom not found; cannot auto-detect.")
+            break
+        
+        output = (proc.stdout or "") + (proc.stderr or "")
+        
+        # Stop if we hit an index that doesn't exist
+        if "No supported devices" in output or "No matching device" in output:
+            break
 
-    output = (proc.stdout or "") + (proc.stderr or "")
-    serial = None
+        serial = None
+        for line in output.splitlines():
+            if "Serial number" in line or "serial number" in line or "S/N" in line:
+                parts = line.split(":", 1)
+                if len(parts) == 2:
+                    candidate = parts[1].strip()
+                    if candidate:
+                        serial = candidate.split()[0]
+                        break
+        
+        # If we found a serial (or at least a device responding), add it
+        if serial:
+            print(f"[STARTUP] Found RTL-SDR at index {index}: Serial {serial}")
+            devices.append({
+                "name": f"RTL_{serial}",
+                "id": serial
+            })
+        else:
+            # Device exists at this index but couldn't read serial? 
+            # We can still use it by index, but safer to skip or default.
+            # Let's try to assume it's valid if exit code was 0.
+            if proc.returncode == 0:
+                fallback_id = str(index)
+                devices.append({"name": f"RTL_Index_{index}", "id": fallback_id})
 
-    for line in output.splitlines():
-        line = line.strip()
-        if "Serial number" in line or "serial number" in line or "S/N" in line:
-            parts = line.split(":", 1)
-            if len(parts) == 2:
-                candidate = parts[1].strip()
-                if candidate:
-                    serial = candidate.split()[0]
-                    break
-    if serial:
-        return serial
-    print("[STARTUP] Could not parse RTL-SDR serial from rtl_eeprom output.")
-    return None
+        index += 1
+
+    return devices
 
 def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_model: str) -> None:
     """

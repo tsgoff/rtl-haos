@@ -116,29 +116,37 @@ def main():
 
     if rtl_config:
         # Explicit radios from config.py (Advanced Mode)
+        print(f"[STARTUP] Loading {len(rtl_config)} radios from manual config.")
         for radio in rtl_config:
             threading.Thread(
                 target=rtl_loop,
-                # Pass 'processor' so the radio can send data to it
                 args=(radio, mqtt_handler, processor, sys_id, sys_model),
                 daemon=True,
             ).start()
     else:
-        # AUTO MODE: Detect single radio & Apply Defaults
-        auto_serial = discover_default_rtl_serial()
+        # AUTO MODE: Detect ALL radios & Apply Defaults
+        # UPDATED: Now uses the new discover_rtl_devices function
+        detected_radios = discover_rtl_devices() # <--- Changed function call
         
-        # Build the radio config dict
-        if auto_serial:
-            print(f"[STARTUP] Auto-detected RTL-SDR serial: {auto_serial}")
-            auto_radio = {
-                "name": f"RTL_{auto_serial}", 
-                "id": auto_serial,
-                "freq": config.RTL_DEFAULT_FREQ,            
-                "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL,
-                "rate": config.RTL_DEFAULT_RATE   
-            }
+        if detected_radios:
+            print(f"[STARTUP] Auto-detected {len(detected_radios)} radios.")
+            for dr in detected_radios:
+                # Merge defaults into the detected device dict
+                radio_setup = {
+                    "freq": config.RTL_DEFAULT_FREQ,
+                    "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL,
+                    "rate": config.RTL_DEFAULT_RATE
+                }
+                radio_setup.update(dr) # Overwrite with detected name/id
+
+                threading.Thread(
+                    target=rtl_loop,
+                    args=(radio_setup, mqtt_handler, processor, sys_id, sys_model),
+                    daemon=True,
+                ).start()
         else:
-            print("[STARTUP] Using default RTL-SDR id '0'")
+            # FALLBACK: No devices found via EEPROM, try blindly forcing ID 0
+            print("[STARTUP] No serials detected. Defaulting to generic device '0'.")
             auto_radio = {
                 "name": "RTL_auto", 
                 "id": "0",
@@ -147,11 +155,11 @@ def main():
                 "rate": config.RTL_DEFAULT_RATE
             }
 
-        threading.Thread(
-            target=rtl_loop,
-            args=(auto_radio, mqtt_handler, processor, sys_id, sys_model),
-            daemon=True,
-        ).start()
+            threading.Thread(
+                target=rtl_loop,
+                args=(auto_radio, mqtt_handler, processor, sys_id, sys_model),
+                daemon=True,
+            ).start()
 
     # 6. START SYSTEM MONITOR
     threading.Thread(
