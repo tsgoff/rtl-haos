@@ -13,15 +13,35 @@ configuration:
   mqtt_pass:
     name: MQTT Password
     description: Password for MQTT authentication.
+  bridge_id:
+    name: Bridge ID
+    description: >-
+      A unique identifier suffix for this bridge (default: 42). 
+      Useful if running multiple bridges on the same network to prevent conflicts.
+  bridge_name:
+    name: Bridge Name
+    description: >-
+      The friendly name used for the Bridge device in Home Assistant.
+  rtl_show_timestamps:
+    name: Show Timestamps
+    description: >-
+      If enabled, the Radio Status sensor will show "Last: HH:MM:SS" (updating every 5s).
+      If disabled, it will show a static "Online" status (cleaner log).
+  rtl_config:
+    name: Radio Configuration
+    description: >-
+      Advanced: Define multiple radios manually. List each radio with a 'name', 'freq', 
+      and optional 'id' (Serial Number), 'rate', or 'hop_interval'.
   rtl_expire_after:
     name: Sensor Expiry
     description: >-
-      Time in seconds before sensors are marked unavailable in Home Assistant.
+      Time in seconds before sensors are marked 'Unavailable' in Home Assistant
+      if no new signal is received.
   rtl_throttle_interval:
     name: Throttle Interval
     description: >-
       Seconds to buffer readings before publishing. Set to 0 for real-time
-      updates, or higher values to average readings and reduce database size.
+      updates, or higher (e.g., 30) to average readings and reduce database size.
   debug_raw_json:
     name: Debug Mode
     description: Print raw rtl_433 JSON output to the log.
