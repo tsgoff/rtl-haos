@@ -93,7 +93,7 @@ def show_logo(version):
     for line in logo_lines:
         sys.stdout.write(f"{c_blue}{line}{c_reset}\n")
     sys.stdout.write("\n")
-    sys.stdout.write(f"   {c_purple}>>> RTL-SDR Bridge for Home Assistant ({version}) <<<{c_reset}\n")
+    sys.stdout.write(f"{c_purple}>>> RTL-SDR Bridge for Home Assistant ({version}) <<<{c_reset}\n")
     sys.stdout.write("\n")
     sys.stdout.flush()
 
