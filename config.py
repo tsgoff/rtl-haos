@@ -45,7 +45,7 @@ class Settings(BaseSettings):
 
     # --- NEW: TOGGLE FOR TIMESTAMPS ---
     rtl_show_timestamps: bool = Field(
-        default=True, 
+        default=False, 
         description="If True, shows 'Last: HH:MM:SS'. If False, shows 'Online'."
     )
 
