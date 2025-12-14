@@ -8,7 +8,7 @@ DESCRIPTION:
   - Starts Data Processor (Throttling).
   - Starts RTL Managers (Radios).
   - Starts System Monitor.
-  - UPDATED: Auto-Mode now only starts the FIRST detected radio (Single Device Mode).
+  - UPDATED: Now maps Manual Config Serial Numbers to Physical Indices to prevent driver crashes.
 """
 import builtins
 from datetime import datetime
@@ -98,38 +98,65 @@ def main():
     sys_model = config.BRIDGE_NAME
     sys_name = f"{sys_model} ({sys_id})"
 
+    # --- NEW: HARDWARE MAPPING ---
+    # Always scan first to find where the serials actually live (Index 0 vs Index 1)
+    print("[STARTUP] Scanning USB bus for RTL-SDR devices...")
+    detected_devices = discover_rtl_devices()
+    
+    # Create a map: "102" -> 0, "101" -> 1
+    serial_to_index = {}
+    if detected_devices:
+        for d in detected_devices:
+            if 'id' in d and 'index' in d:
+                serial_to_index[str(d['id'])] = d['index']
+        print(f"[STARTUP] Hardware Map: {serial_to_index}")
+    else:
+        print("[STARTUP] Warning: No hardware detected during scan.")
+
     # 5. START RTL RADIO THREADS
     rtl_config = getattr(config, "RTL_CONFIG", None)
 
     if rtl_config:
-        # Explicit radios from config.py (Advanced Mode)
+        # --- MANUAL MODE (Advanced) ---
         print(f"[STARTUP] Loading {len(rtl_config)} radios from manual config.")
+        
         for radio in rtl_config:
+            # Try to match the config 'id' (Serial) to a physical 'index'
+            target_id = str(radio.get("id", ""))
+            
+            if target_id in serial_to_index:
+                idx = serial_to_index[target_id]
+                radio['index'] = idx
+                print(f"[STARTUP] Matched Config '{radio.get('name')}' (Serial {target_id}) to Physical Index {idx}")
+            else:
+                print(f"[STARTUP] Warning: Configured Serial {target_id} not found in scan. Driver may fail.")
+
             threading.Thread(
                 target=rtl_loop,
                 args=(radio, mqtt_handler, processor, sys_id, sys_model),
                 daemon=True,
             ).start()
+            
+            # STAGGER DELAY (Crucial for 2+ sticks)
             print("[STARTUP] Staggering next radio start by 5 seconds...")
             time.sleep(5)
-    else:
-        # AUTO MODE: Detect radios but ONLY START THE FIRST ONE
-        detected_radios = discover_rtl_devices()
-        
-        if detected_radios:
-            # --- CHANGED: Pick only the first device ---
-            target_radio = detected_radios[0]
             
-            print(f"[STARTUP] Auto-detected {len(detected_radios)} radios.")
+    else:
+        # --- AUTO MODE (Simple) ---
+        if detected_devices:
+            # Pick ONLY the first detected device (Single Device Mode)
+            target_radio = detected_devices[0]
+            
+            print(f"[STARTUP] Auto-detected {len(detected_devices)} radios.")
             print(f"[STARTUP] Unconfigured Mode: Selecting first device only ({target_radio['name']}).")
             
-            # Merge defaults into the detected device dict
+            # Merge defaults
             radio_setup = {
                 "freq": config.RTL_DEFAULT_FREQ,
                 "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL,
                 "rate": config.RTL_DEFAULT_RATE
             }
-            radio_setup.update(target_radio) # Overwrite with detected name/id
+            radio_setup.update(target_radio)
 
             threading.Thread(
                 target=rtl_loop,
@@ -138,7 +165,7 @@ def main():
             ).start()
                 
         else:
-            # FALLBACK: No devices found via EEPROM, try blindly forcing ID 0
+            # FALLBACK
             print("[STARTUP] No serials detected. Defaulting to generic device '0'.")
             auto_radio = {
                 "name": "RTL_auto", 
