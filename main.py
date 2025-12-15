@@ -8,7 +8,7 @@ DESCRIPTION:
   - Starts Data Processor (Throttling).
   - Starts RTL Managers (Radios).
   - Starts System Monitor.
-  - UPDATED: Fixed Colors by using BOLD ANSI (1;3x) instead of unsupported High-Intensity (9x).
+  - UPDATED: Switched 'c_purple' to INVERTED BOLD MAGENTA (Badge Style) for maximum pop.
 """
 import os
 import sys
@@ -26,16 +26,16 @@ import importlib.util
 import subprocess
 
 # --- 1. GLOBAL LOGGING & COLOR SETUP ---
-# We use "1;3x" (Bold/Bright) for Headers to make them pop.
-# We use "37" (Standard) for Timestamp so it stays dim/gray.
+# "1" = Bold/Bright
+# "7" = Inverse (Swap Foreground/Background) - Creates a "Badge" look
 
-c_cyan    = "\x1b[1;36m"   # Bold Cyan (TX / MQTT)
-c_blue    = "\x1b[1;34m"   # Bold Blue (DEBUG / RTL)
-c_purple  = "\x1b[1;35m"   # Bold Purple (Radios / Throttle)
-c_green   = "\x1b[1;32m"   # Bold Green (INFO / Startup)
-c_yellow  = "\x1b[1;33m"   # Bold Yellow (WARN)
-c_red     = "\x1b[1;31m"   # Bold Red (ERROR / Nuke)
-c_white   = "\x1b[37m"     # Standard White (Timestamp - Dimmer)
+c_cyan    = "\x1b[1;36m"     # Bold Cyan
+c_blue    = "\x1b[1;34m"     # Bold Blue
+c_purple  = "\x1b[1;35;7m"   # INVERTED Bold Magenta (Solid Block / Badge)
+c_green   = "\x1b[1;32m"     # Bold Green
+c_yellow  = "\x1b[1;33m"     # Bold Yellow
+c_red     = "\x1b[1;31m"     # Bold Red
+c_white   = "\x1b[37m"       # Standard White (Timestamp)
 c_reset   = "\x1b[0m"
 
 _original_print = builtins.print
@@ -46,24 +46,26 @@ def get_source_color(tag_text):
     """
     clean = tag_text.lower().replace("[", "").replace("]", "")
     
-    # Infrastructure Tags
+    # Infrastructure Tags (Keep text-only to avoid visual clutter?)
+    # For consistency, let's keep infrastructure distinct.
+    
     if "mqtt" in clean: return c_cyan
     if "rtl" in clean: return c_blue
     if "startup" in clean: return c_green
     if "nuke" in clean: return c_red
     
-    # Data Processing Tags
+    # Data Processing Tags (Apply the new Badge)
     if "throttle" in clean: return c_purple
     
-    # Default (Radio IDs like [915], [433], [SourceID])
+    # Default (Radio IDs like [915], [433], [SourceID]) - Apply Badge
     return c_purple
 
 def timestamped_print(*args, **kwargs):
     """
-    Smart Logging v5 (Bold Colors Fix):
-    1. Detect Header Level (INFO, WARN, ERROR).
-    2. Detect [Source] tag.
-    3. Apply specific color to [Source] based on origin.
+    Smart Logging v6 (Badge Style):
+    1. Detect Header Level.
+    2. Detect [Source].
+    3. Apply Inverted Color to [Radio] sources to make them pop.
     """
     now = datetime.now().strftime("%H:%M:%S")
     time_prefix = f"{c_white}[{now}]{c_reset}"
