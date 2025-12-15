@@ -8,7 +8,7 @@ DESCRIPTION:
   - Starts Data Processor (Throttling).
   - Starts RTL Managers (Radios).
   - Starts System Monitor.
-  - UPDATED: Source-based coloring (MQTT=Cyan, RTL=Blue, Radios=Purple).
+  - UPDATED: Switched 'c_purple' to BOLD Purple for better visibility.
 """
 import os
 import sys
@@ -26,13 +26,13 @@ import importlib.util
 import subprocess
 
 # --- 1. GLOBAL LOGGING & COLOR SETUP ---
-c_cyan    = "\x1b[36m"   # Cyan (TX / MQTT)
-c_blue    = "\x1b[34m"   # Blue (DEBUG / RTL)
-c_purple  = "\x1b[35m"   # Purple (Radios / Throttle)
-c_green   = "\x1b[32m"   # Green (INFO / Startup)
-c_yellow  = "\x1b[33m"   # Yellow (WARNING)
-c_red     = "\x1b[31m"   # Red (ERROR / Nuke)
-c_white   = "\x1b[37m"   # Standard White (Timestamp)
+c_cyan    = "\x1b[36m"     # Cyan (TX / MQTT)
+c_blue    = "\x1b[34m"     # Blue (DEBUG / RTL)
+c_purple  = "\x1b[1;35m"   # BOLD Purple (Radios / Throttle) - UPDATED!
+c_green   = "\x1b[32m"     # Green (INFO / Startup)
+c_yellow  = "\x1b[33m"     # Yellow (WARNING)
+c_red     = "\x1b[31m"     # Red (ERROR / Nuke)
+c_white   = "\x1b[37m"     # Standard White (Timestamp)
 c_reset   = "\x1b[0m"
 
 _original_print = builtins.print
@@ -170,7 +170,7 @@ def show_logo(version):
     # 2. SPACER
     sys.stdout.write("\n")
     
-    # 3. Print Subtitle: Purple & Yellow
+    # 3. Print Subtitle: BOLD Purple & Yellow
     sys.stdout.write(
         f"{c_purple}>>> RTL-SDR Bridge for Home Assistant ({c_reset}"
         f"{c_yellow}{version}{c_reset}"
