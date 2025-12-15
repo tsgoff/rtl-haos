@@ -8,7 +8,7 @@ DESCRIPTION:
   - Starts Data Processor (Throttling).
   - Starts RTL Managers (Radios).
   - Starts System Monitor.
-  - UPDATED: All Headers (INFO, WARN, ERROR) now use WHITE COLONS for perfect consistency.
+  - UPDATED: DEBUG header is now BOLD MAGENTA (Purple).
 """
 import os
 import sys
@@ -29,8 +29,8 @@ import subprocess
 # Standard ANSI with Bold (1;) to force "Bright" colors on HAOS.
 
 c_cyan    = "\033[1;36m"   # Bold Cyan (Radio IDs / JSON Keys)
-c_magenta = "\033[1;35m"   # Bold Magenta (System Tags: MQTT, RTL)
-c_blue    = "\033[1;34m"   # Bold Blue (DEBUG / Infrastructure)
+c_magenta = "\033[1;35m"   # Bold Magenta (System Tags / DEBUG Header)
+c_blue    = "\033[1;34m"   # Bold Blue (JSON Numbers / Infrastructure)
 c_green   = "\033[1;32m"   # Bold Green (DATA Header / INFO)
 c_yellow  = "\033[1;33m"   # Bold Yellow (WARN Only)
 c_red     = "\033[1;31m"   # Bold Red (ERROR)
@@ -74,8 +74,8 @@ def highlight_json(text):
 
 def timestamped_print(*args, **kwargs):
     """
-    Smart Logging v26 (White Colons Everywhere):
-    Ensures INFO:, WARN:, ERROR: all follow the "ColorText + WhiteColon" standard.
+    Smart Logging v27 (Purple Debug):
+    DEBUG header is now Magenta.
     """
     now = datetime.now().strftime("%H:%M:%S")
     time_prefix = f"{c_dim}[{now}]{c_reset}"
@@ -98,9 +98,9 @@ def timestamped_print(*args, **kwargs):
         header = f"{c_yellow}WARN{c_reset}{c_white}:{c_reset}"
         msg = msg.replace("WARNING:", "").strip()
 
-    # C. DEBUG (Blue + White Colon)
+    # C. DEBUG (Purple/Magenta + White Colon)
     elif "debug" in lower_msg:
-        header = f"{c_blue}DEBUG{c_reset}{c_white}:{c_reset}"
+        header = f"{c_magenta}DEBUG{c_reset}{c_white}:{c_reset}"
         msg = msg.replace("[DEBUG]", "").replace("[debug]", "").strip()
         
         # Apply JSON Highlighting
