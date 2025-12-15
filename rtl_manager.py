@@ -131,15 +131,17 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
     else:
         frequencies = [f.strip() for f in str(raw_freq).split(",")]
 
-    # --- SAFETY CHECK FOR UNITS ---
+# --- SAFETY CHECK FOR UNITS ---
     for f in frequencies:
-        if f.replace('.', '', 1).isdigit():
+        if f.endswith("m"):
+             print(f"[{radio_name}] WARNING: Frequency '{f}' uses lowercase 'm' (milli). Did you mean '{f.upper()}' (Mega)?")
+        elif f.replace('.', '', 1).isdigit():
              try:
                  val = float(f)
                  if val < 24000000:
                      print(f"[{radio_name}] WARNING: Frequency '{f}' has no units! Did you mean '{f}M'?")
              except ValueError:
-                 pass
+                 pass   
 
     status_field = f"radio_status_{naming_id}"
     status_friendly_name = f"{radio_name}"
