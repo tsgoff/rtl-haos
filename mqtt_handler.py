@@ -242,6 +242,10 @@ class HomeNodeMQTT:
                 "model": device_model,
                 "name": device_name 
             }
+
+            if device_model != config.BRIDGE_NAME:
+                device_registry["via_device"] = "rtl433_"+config.BRIDGE_NAME+"_"+config.BRIDGE_ID
+            
             if device_model == config.BRIDGE_NAME:
                 device_registry["sw_version"] = self.sw_version
 
