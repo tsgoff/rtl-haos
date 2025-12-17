@@ -62,7 +62,7 @@ class Settings(BaseSettings):
             "wind_gust_km_h", "wind_gust_mi_h", "wind_dir_deg", "wind_dir",
             "rain_mm", "rain_in", "rain_rate_mm_h", "rain_rate_in_h",
             "lux", "uv", "strikes", "strike_distance", "storm_dist",
-            "Consumption", "consumption", "meter_reading",
+            "Consumption", "consumption", "meter_reading", "moisture"
         ]
     )
 
