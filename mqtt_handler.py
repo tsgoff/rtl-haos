@@ -3,10 +3,7 @@
 FILE: mqtt_handler.py
 DESCRIPTION:
   Manages the connection to the MQTT Broker.
-  - UPDATED: 
-    1. Accepts 'version' in __init__ to populate Device Info (firmware).
-    2. 'Nuke' now immediately resurrects the Host Bridge entities.
-    3. 'radio_status' entities no longer expire (timeout) in HA.
+  - UPDATED: Added "Restart Radios" button support.
 """
 import json
 import threading
@@ -18,10 +15,11 @@ from paho.mqtt.enums import CallbackAPIVersion
 import config
 from utils import clean_mac, get_system_mac
 from field_meta import FIELD_META
+from rtl_manager import trigger_radio_restart  # <--- NEW IMPORT
 
 class HomeNodeMQTT:
     def __init__(self, version="Unknown"):
-        self.sw_version = version  # Store version for device registry
+        self.sw_version = version
         self.client = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2)
         self.TOPIC_AVAILABILITY = f"home/status/rtl_bridge{config.ID_SUFFIX}/availability"
         self.client.username_pw_set(config.MQTT_SETTINGS["user"], config.MQTT_SETTINGS["pass"])
@@ -53,8 +51,13 @@ class HomeNodeMQTT:
             self.nuke_command_topic = f"home/status/rtl_bridge{config.ID_SUFFIX}/nuke/set"
             c.subscribe(self.nuke_command_topic)
             
-            # 2. Publish the Nuke Button
+            # 2. Subscribe to Restart Command (NEW)
+            self.restart_command_topic = f"home/status/rtl_bridge{config.ID_SUFFIX}/restart/set"
+            c.subscribe(self.restart_command_topic)
+            
+            # 3. Publish Buttons
             self._publish_nuke_button()
+            self._publish_restart_button() # <--- NEW
         else:
             print(f"[MQTT] Connection Failed! Code: {rc}")
 
@@ -66,7 +69,12 @@ class HomeNodeMQTT:
                 self._handle_nuke_press()
                 return
 
-            # 2. Handle Nuke Scanning (Search & Destroy)
+            # 2. Handle Restart Button Press (NEW)
+            if msg.topic == self.restart_command_topic:
+                trigger_radio_restart()
+                return
+
+            # 3. Handle Nuke Scanning (Search & Destroy)
             if self.is_nuking:
                 if not msg.payload: return
 
@@ -79,9 +87,9 @@ class HomeNodeMQTT:
                     manufacturer = device_info.get("manufacturer", "")
 
                     if "rtl-haos" in manufacturer:
-                        # SAFETY: Don't delete the Nuke button itself!
-                        if "nuke" in msg.topic or "rtl_bridge_nuke" in str(msg.topic):
-                            return
+                        # SAFETY: Don't delete the buttons!
+                        if "nuke" in msg.topic or "rtl_bridge_nuke" in str(msg.topic): return
+                        if "restart" in msg.topic or "rtl_bridge_restart" in str(msg.topic): return
 
                         print(f"[NUKE] FOUND & DELETING: {msg.topic}")
                         self.client.publish(msg.topic, "", retain=True)
@@ -92,7 +100,7 @@ class HomeNodeMQTT:
             print(f"[MQTT] Error handling message: {e}")
 
     def _publish_nuke_button(self):
-        """Creates the 'Nuke Entities' button on the Bridge device."""
+        """Creates the 'Delete Entities' button."""
         sys_id = get_system_mac().replace(":", "").lower()
         unique_id = f"rtl_bridge_nuke{config.ID_SUFFIX}"
         
@@ -107,7 +115,31 @@ class HomeNodeMQTT:
                 "manufacturer": "rtl-haos",
                 "model": config.BRIDGE_NAME,
                 "name": f"{config.BRIDGE_NAME} ({sys_id})",
-                "sw_version": self.sw_version  # Inject Version Here
+                "sw_version": self.sw_version
+            },
+            "availability_topic": self.TOPIC_AVAILABILITY
+        }
+        
+        config_topic = f"homeassistant/button/{unique_id}/config"
+        self.client.publish(config_topic, json.dumps(payload), retain=True)
+
+    def _publish_restart_button(self):
+        """Creates the 'Restart Radios' button. (NEW)"""
+        sys_id = get_system_mac().replace(":", "").lower()
+        unique_id = f"rtl_bridge_restart{config.ID_SUFFIX}"
+        
+        payload = {
+            "name": "Restart Radios",
+            "command_topic": self.restart_command_topic,
+            "unique_id": unique_id,
+            "icon": "mdi:restart",
+            "entity_category": "config",
+            "device": {
+                "identifiers": [f"rtl433_{config.BRIDGE_NAME}_{sys_id}"],
+                "manufacturer": "rtl-haos",
+                "model": config.BRIDGE_NAME,
+                "name": f"{config.BRIDGE_NAME} ({sys_id})",
+                "sw_version": self.sw_version
             },
             "availability_topic": self.TOPIC_AVAILABILITY
         }
@@ -118,8 +150,6 @@ class HomeNodeMQTT:
     def _handle_nuke_press(self):
         """Counts presses and triggers Nuke if threshold met."""
         now = time.time()
-        
-        # Reset if too much time passed
         if now - self.nuke_last_press > self.NUKE_TIMEOUT:
             self.nuke_counter = 0
         
@@ -139,13 +169,8 @@ class HomeNodeMQTT:
         print("\n" + "!"*50)
         print("[NUKE] DETONATED! Scanning MQTT for 'rtl-haos' devices...")
         print("!"*50 + "\n")
-        
         self.is_nuking = True
-        
-        # Subscribe to ALL Home Assistant config topics (Wildcard)
         self.client.subscribe("homeassistant/+/+/config")
-        
-        # Schedule the scan to stop in 5 seconds
         threading.Timer(5.0, self._stop_nuke_scan).start()
 
     def _stop_nuke_scan(self):
@@ -153,22 +178,16 @@ class HomeNodeMQTT:
         self.is_nuking = False
         self.client.unsubscribe("homeassistant/+/+/config")
         
-        # 1. Clear Internal Memory (So we know to re-publish everything)
         with self.discovery_lock:
             self.discovery_published.clear()
             self.last_sent_values.clear()
             self.tracked_devices.clear()
 
         print(f"[NUKE] Scan Complete. All identified entities removed.")
-        
-        # 2. IMMEDIATE RESURRECTION
-        # Re-assert that the Bridge is online
         self.client.publish(self.TOPIC_AVAILABILITY, "online", retain=True)
-        
-        # Re-publish the Nuke Button immediately (so it doesn't vanish)
         self._publish_nuke_button()
-        
-        print("[NUKE] Host Entities restored. Sensor data (CPU/RAM) will return shortly.")
+        self._publish_restart_button() # <--- Restore this too
+        print("[NUKE] Host Entities restored.")
 
     def start(self):
         print(f"[STARTUP] Connecting to MQTT Broker at {config.MQTT_SETTINGS['host']}...")
@@ -217,15 +236,12 @@ class HomeNodeMQTT:
             if sensor_name.startswith("radio_status"):
                 entity_cat = None
 
-            # --- DEVICE REGISTRY ---
             device_registry = {
                 "identifiers": [f"rtl433_{device_model}_{unique_id.split('_')[0]}"],
                 "manufacturer": "rtl-haos",
                 "model": device_model,
                 "name": device_name 
             }
-            
-            # Inject Firmware Version ONLY for the Bridge itself
             if device_model == config.BRIDGE_NAME:
                 device_registry["sw_version"] = self.sw_version
 
@@ -248,7 +264,6 @@ class HomeNodeMQTT:
             if device_class in ["wind_direction"]:
                 payload["state_class"] = "measurement_angle"
 
-            # UPDATED: Disable expiration for radio_status so it doesn't go Unavailable during silence
             if "version" not in sensor_name.lower() and not sensor_name.startswith("radio_status"):
                 payload["expire_after"] = config.RTL_EXPIRE_AFTER
             
@@ -262,7 +277,6 @@ class HomeNodeMQTT:
         if value is None: return
 
         self.tracked_devices.add(device_name)
-
         clean_id = clean_mac(sensor_id) 
         unique_id_base = clean_id
         state_topic_base = clean_id
@@ -273,12 +287,10 @@ class HomeNodeMQTT:
         self._publish_discovery(field, state_topic, unique_id, device_name, device_model, friendly_name_override=friendly_name)
 
         unique_id_v2 = f"{unique_id}{config.ID_SUFFIX}"
-        
         value_changed = self.last_sent_values.get(unique_id_v2) != value
 
         if value_changed or is_rtl:
             self.client.publish(state_topic, str(value), retain=True)
             self.last_sent_values[unique_id_v2] = value
-            
             if value_changed:
                 print(f" -> TX {device_name} [{field}]: {value}")

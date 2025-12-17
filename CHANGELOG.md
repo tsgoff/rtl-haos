@@ -1,4 +1,10 @@
 # Changelog
+## v1.1
+- **NEW:** Improved management of multiple radios
+- **NEW:** Color log with colors for WARNING, ERROR, INFO, DEBUG
+- **NEW:** Add-on icon
+- **NEW:** Added button to reset radios
+- **FIX:** Hop mode works with rtl-sdr autodetect
 ## v1.0.34
 - **NEW:** Now supports Frequency Hopping via 'hop_interval' and multiple frequencies.
 - **NEW:** Replaced rtl-haos revision entity with Device info

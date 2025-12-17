@@ -8,47 +8,152 @@ DESCRIPTION:
   - Starts Data Processor (Throttling).
   - Starts RTL Managers (Radios).
   - Starts System Monitor.
-  - UPDATED: Auto Mode now uses global defaults for Freq/Hopping.
-  - UPDATED: Version entity removed (now part of Device Info).
+  - UPDATED: DEBUG header is now BOLD MAGENTA (Purple).
 """
+import os
+import sys
+import re
+
+# --- 0. FORCE COLOR ENVIRONMENT ---
+os.environ["TERM"] = "xterm-256color"
+os.environ["CLICOLOR_FORCE"] = "1"
+
 import builtins
 from datetime import datetime
+import threading
+import time
+import importlib.util
+import subprocess
 
-# --- 1. GLOBAL TIMESTAMP OVERRIDE ---
-# Save the original print function so we don't cause an infinite recursion
+# --- 1. GLOBAL LOGGING & COLOR SETUP ---
+# Standard ANSI with Bold (1;) to force "Bright" colors on HAOS.
+
+c_cyan    = "\033[1;36m"   # Bold Cyan (Radio IDs / JSON Keys)
+c_magenta = "\033[1;35m"   # Bold Magenta (System Tags / DEBUG Header)
+c_blue    = "\033[1;34m"   # Bold Blue (JSON Numbers / Infrastructure)
+c_green   = "\033[1;32m"   # Bold Green (DATA Header / INFO)
+c_yellow  = "\033[1;33m"   # Bold Yellow (WARN Only)
+c_red     = "\033[1;31m"   # Bold Red (ERROR)
+c_white   = "\033[1;37m"   # Bold White (Values / Brackets / Colons)
+c_dim     = "\033[37m"     # Standard White (Timestamp)
+c_reset   = "\033[0m"
+
 _original_print = builtins.print
 
+def get_source_color(clean_text):
+    """
+    Determines the color of the source tag text (without brackets).
+    """
+    clean = clean_text.lower()
+    
+    # Infrastructure -> Magenta
+    if "mqtt" in clean: return c_magenta
+    if "rtl" in clean: return c_magenta
+    if "startup" in clean: return c_magenta
+    if "nuke" in clean: return c_red
+    
+    # Radio Data / IDs -> Cyan
+    return c_cyan
+
+def highlight_json(text):
+    """
+    Simple Regex-based JSON syntax highlighter.
+    Keys = Cyan
+    Values = White
+    Separators = White
+    """
+    # 1. Color Keys (Strings followed by colon) -> Cyan key, White Colon
+    text = re.sub(r'("[^"]+")\s*:', f'{c_cyan}\\1{c_reset}{c_white}:{c_reset}', text)
+    
+    # 2. Color Values (String, Number, Bool) -> White
+    text = re.sub(r':\s*("[^"]+")', f': {c_white}\\1{c_reset}', text)
+    text = re.sub(r':\s*(-?\d+\.?\d*)', f': {c_white}\\1{c_reset}', text)
+    text = re.sub(r':\s*(true|false|null)', f': {c_white}\\1{c_reset}', text)
+    
+    return text
+
 def timestamped_print(*args, **kwargs):
-    """Adds a timestamp to every print() call."""
-    # Format: [18:05:00] INFO:
-    now = datetime.now().strftime("[%H:%M:%S]")
+    """
+    Smart Logging v27 (Purple Debug):
+    DEBUG header is now Magenta.
+    """
+    now = datetime.now().strftime("%H:%M:%S")
+    time_prefix = f"{c_dim}[{now}]{c_reset}"
     
-    # Mimic the bashio style (Short time + INFO tag)
-    _original_print(f"{now} INFO:", *args, **kwargs)
+    msg = " ".join(map(str, args))
+    lower_msg = msg.lower()
     
-# Overwrite Python's built-in print with our new version
+    # --- 1. DETERMINE HEADER LEVEL ---
+    # Default: Green INFO + White Colon
+    header = f"{c_green}INFO{c_reset}{c_white}:{c_reset}" 
+    special_formatting_applied = False
+    
+    # A. ERROR (Red + White Colon)
+    if any(x in lower_msg for x in ["error", "critical", "failed", "crashed"]):
+        header = f"{c_red}ERROR{c_reset}{c_white}:{c_reset}"
+        msg = msg.replace("CRITICAL:", "").replace("ERROR:", "").strip()
+
+    # B. WARNING (Yellow + White Colon)
+    elif "warning" in lower_msg:
+        header = f"{c_yellow}WARN{c_reset}{c_white}:{c_reset}"
+        msg = msg.replace("WARNING:", "").strip()
+
+    # C. DEBUG (Purple/Magenta + White Colon)
+    elif "debug" in lower_msg:
+        header = f"{c_magenta}DEBUG{c_reset}{c_white}:{c_reset}"
+        msg = msg.replace("[DEBUG]", "").replace("[debug]", "").strip()
+        
+        # Apply JSON Highlighting
+        if "{" in msg and "}" in msg:
+            msg = highlight_json(msg)
+
+    # D. DATA (Green Header + White Colon)
+    elif "-> tx" in lower_msg:
+        header = f"{c_green}DATA{c_reset}{c_white}:{c_reset}"
+        msg = msg.replace("-> TX", "").strip()
+        
+        # Parse specialized format: "rtl-bridge... [source]: value"
+        match = re.match(r".*?\[(.*?)(?:\])?:\s+(.*)", msg)
+        if match:
+            src_text = match.group(1).replace("]", "")
+            val = match.group(2)
+            
+            # Format: White[ CyanSource White]: WhiteValue
+            msg = f"{c_white}[{c_reset}{c_cyan}{src_text}{c_reset}{c_white}]:{c_reset} {c_white}{val}{c_reset}"
+            special_formatting_applied = True
+
+    # --- 2. UNIVERSAL SOURCE DETECTION ---
+    if not special_formatting_applied:
+        # Regex catches [Content] at start of message
+        match = re.match(r"^\[(.*?)\]\s*(.*)", msg)
+        if match:
+            src_text = match.group(1)
+            rest_of_msg = match.group(2)
+            
+            # Clean "RX:" and existing colons
+            rest_of_msg = re.sub(r"^(RX:?|:)\s*", "", rest_of_msg).strip()
+            
+            # Determine Color
+            s_color = get_source_color(src_text)
+            
+            # Format: White[ ColorSource White]: Message
+            msg = f"{c_white}[{c_reset}{s_color}{src_text}{c_reset}{c_white}]:{c_reset} {rest_of_msg}"
+
+    # Print Final
+    _original_print(f"{time_prefix} {header} {msg}", flush=True, **kwargs)
+
+# Override the built-in print
 builtins.print = timestamped_print
 # ------------------------------------
 
-import threading
-import time
-import sys
-import importlib.util
-import subprocess
-import os
-import socket
-
 # --- PRE-FLIGHT DEPENDENCY CHECK ---
 def check_dependencies():
-    # 1. Check for the rtl_433 binary (System Dependency)
     if not subprocess.run(["which", "rtl_433"], capture_output=True).stdout:
-        print("CRITICAL: 'rtl_433' binary not found. Please install it (e.g., sudo apt install rtl-433).")
+        print("CRITICAL: 'rtl_433' binary not found. Please install it.")
         sys.exit(1)
 
-    # 2. Check for Paho MQTT (Python Dependency)
     if importlib.util.find_spec("paho") is None:
         print("CRITICAL: Python dependency 'paho-mqtt' not found.")
-        print("Please install requirements: uv sync")
         sys.exit(1)
 
 check_dependencies()
@@ -57,10 +162,8 @@ import config
 from mqtt_handler import HomeNodeMQTT
 from utils import get_system_mac
 from system_monitor import system_stats_loop
-
-# New Imports from Split Files
 from data_processor import DataProcessor
-from rtl_manager import rtl_loop, discover_default_rtl_serial
+from rtl_manager import rtl_loop, discover_rtl_devices
 
 def get_version():
     """Retrieves the version string from config.yaml."""
@@ -76,71 +179,131 @@ def get_version():
         pass
     return "Unknown"
 
+def show_logo(version):
+    """Prints the ASCII logo (Blue) and Subtitle (Cyan/Yellow)."""
+    logo_lines = [
+        r"   ____  _____  _         _   _    _    ___  ____  ",
+        r"  |  _ \|_   _|| |       | | | |  / \  / _ \/ ___| ",
+        r"  | |_) | | |  | |  ___  | |_| | / _ \| | | \___ \ ",
+        r"  |  _ <  | |  | | |___| |  _  |/ ___ \ |_| |___) |",
+        r"  |_| \_\ |_|  |_____|   |_| |_/_/   \_\___/|____/ "
+    ]
+    
+    # 1. Print Logo: Apply Blue to EACH line individually
+    for line in logo_lines:
+        sys.stdout.write(f"{c_blue}{line}{c_reset}\n")
+    
+    # 2. SPACER
+    sys.stdout.write("\n")
+    
+    # 3. Print Subtitle: Cyan & Yellow
+    sys.stdout.write(
+        f"{c_cyan}>>> RTL-SDR Bridge for Home Assistant ({c_reset}"
+        f"{c_yellow}{version}{c_reset}"
+        f"{c_cyan}) <<<{c_reset}\n"
+    )
+    
+    # 4. Separator
+    sys.stdout.write("\n")
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+
 def main():
     ver = get_version()
-    print(f"--- RTL-HAOS ({ver}) ---")
+    show_logo(ver)
+    time.sleep(3)
 
-    # 1. START MQTT (With Version Info)
+    # 2. START MQTT
     mqtt_handler = HomeNodeMQTT(version=ver)
     mqtt_handler.start()
 
-    # 2. START DATA PROCESSOR (Handles Buffering/Throttling)
+    # 3. START DATA PROCESSOR
     processor = DataProcessor(mqtt_handler)
     threading.Thread(target=processor.start_throttle_loop, daemon=True).start()
 
-    # 3. GET SYSTEM IDENTITY
+    # 4. GET SYSTEM IDENTITY
     sys_id = get_system_mac().replace(":", "").lower() 
     sys_model = config.BRIDGE_NAME
     sys_name = f"{sys_model} ({sys_id})"
 
-    # 4. START RTL RADIO THREADS
+    # --- HARDWARE MAPPING ---
+    print("[STARTUP] Scanning USB bus for RTL-SDR devices...")
+    detected_devices = discover_rtl_devices()
+    
+    serial_to_index = {}
+    if detected_devices:
+        for d in detected_devices:
+            if 'id' in d and 'index' in d:
+                serial_to_index[str(d['id'])] = d['index']
+        print(f"[STARTUP] Hardware Map: {serial_to_index}")
+    else:
+        print("[STARTUP] Warning: No hardware detected during scan.")
+
+    # 5. START RTL RADIO THREADS
     rtl_config = getattr(config, "RTL_CONFIG", None)
 
     if rtl_config:
-        # Explicit radios from config.py (Advanced Mode)
+        print(f"[STARTUP] Loading {len(rtl_config)} radios from manual config.")
         for radio in rtl_config:
+            target_id = radio.get("id") 
+            if target_id: target_id = str(target_id).strip()
+            
+            if target_id and target_id in serial_to_index:
+                idx = serial_to_index[target_id]
+                radio['index'] = idx
+                r_name = radio.get("name", "Unknown")
+                print(f"[STARTUP] Matched Config '{r_name}' (Serial {target_id}) to Physical Index {idx}")
+            else:
+                if target_id:
+                     print(f"[STARTUP] Warning: Configured Serial {target_id} not found in scan. Driver may fail.")
+
             threading.Thread(
                 target=rtl_loop,
-                # Pass 'processor' so the radio can send data to it
                 args=(radio, mqtt_handler, processor, sys_id, sys_model),
                 daemon=True,
             ).start()
+            time.sleep(5)
+            
     else:
-        # AUTO MODE: Detect single radio & Apply Defaults
-        auto_serial = discover_default_rtl_serial()
-        
-        # Build the radio config dict
-        if auto_serial:
-            print(f"[STARTUP] Auto-detected RTL-SDR serial: {auto_serial}")
-            auto_radio = {
-                "name": f"RTL_{auto_serial}", 
-                "id": auto_serial,
-                "freq": config.RTL_DEFAULT_FREQ,             # <--- INJECTED
-                "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL # <--- INJECTED
+        if detected_devices:
+            target_radio = detected_devices[0]
+            print(f"[STARTUP] Auto-detected {len(detected_devices)} radios.")
+            print(f"[STARTUP] Unconfigured Mode: Selecting first device only ({target_radio['name']}).")
+            
+            radio_setup = {
+                "freq": config.RTL_DEFAULT_FREQ,
+                "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL,
+                "rate": config.RTL_DEFAULT_RATE
             }
+            radio_setup.update(target_radio)
+
+            threading.Thread(
+                target=rtl_loop,
+                args=(radio_setup, mqtt_handler, processor, sys_id, sys_model),
+                daemon=True,
+            ).start()
         else:
-            print("[STARTUP] Using default RTL-SDR id '0'")
+            print("[STARTUP] No serials detected. Defaulting to generic device '0'.")
             auto_radio = {
-                "name": "RTL_auto", 
-                "id": "0",
-                "freq": config.RTL_DEFAULT_FREQ,             # <--- INJECTED
-                "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL # <--- INJECTED
+                "name": "RTL_auto", "id": "0",
+                "freq": config.RTL_DEFAULT_FREQ,             
+                "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL,
+                "rate": config.RTL_DEFAULT_RATE
             }
+            threading.Thread(
+                target=rtl_loop,
+                args=(auto_radio, mqtt_handler, processor, sys_id, sys_model),
+                daemon=True,
+            ).start()
 
-        threading.Thread(
-            target=rtl_loop,
-            args=(auto_radio, mqtt_handler, processor, sys_id, sys_model),
-            daemon=True,
-        ).start()
-
-    # 5. START SYSTEM MONITOR
+    # 6. START SYSTEM MONITOR
     threading.Thread(
         target=system_stats_loop, 
         args=(mqtt_handler, sys_id, sys_model), 
         daemon=True
     ).start()
 
-    # 6. MAIN LOOP
+    # 7. MAIN LOOP
     try:
         while True: time.sleep(1)
     except KeyboardInterrupt:
