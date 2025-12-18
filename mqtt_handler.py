@@ -263,7 +263,7 @@ class HomeNodeMQTT:
 
             if device_class in ["gas", "energy", "water", "monetary", "precipitation"]:
                 payload["state_class"] = "total_increasing"
-            if device_class in ["temperature", "humidity", "pressure", "illuminance", "voltage","wind_speed"]:
+            if device_class in ["temperature", "humidity", "pressure", "illuminance", "voltage","wind_speed","moisture"]:
                 payload["state_class"] = "measurement"
             if device_class in ["wind_direction"]:
                 payload["state_class"] = "measurement_angle"
