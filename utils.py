@@ -6,7 +6,7 @@ DESCRIPTION:
   - clean_mac(): Sanitizes device IDs for MQTT topics.
   - calculate_dew_point(): Math formula to calculate Dew Point from Temp/Humidity.
   - get_system_mac(): Generates a unique ID for the bridge itself based on hardware.
-  - validate_radio_config(): Checks for common configuration mistakes (Missing M, etc).
+  - validate_radio_config(): Checks for common configuration mistakes (Missing M, Missing ID, etc).
 """
 import re
 import math
@@ -78,7 +78,6 @@ def validate_radio_config(radio_conf):
         if re.match(r"^\d+(\.\d+)?$", f):
             val = float(f)
             # If value is < 1,000,000, it's almost certainly not Hz.
-            # Typical RTL-SDR range is 24MHz+.
             if val < 1000000:
                 warnings.append(
                     f"Frequency '{f}' has no suffix and will be read as Hz (impossible). "
@@ -99,10 +98,19 @@ def validate_radio_config(radio_conf):
     rate = str(radio_conf.get("rate", ""))
     if re.match(r"^\d+$", rate):
         val = int(rate)
-        if val < 1000000: # Assuming no one sets rate in raw Hz < 1M manually without good reason
+        if val < 1000000: 
             warnings.append(
                 f"Sample rate '{rate}' has no suffix (e.g. 'k'). "
                 f"Did you mean '{rate}k'?"
             )
+
+    # 4. Check for Missing or Empty ID (NEW)
+    # The system needs an ID to map the config to a specific USB stick.
+    r_id = radio_conf.get("id")
+    if r_id is None or str(r_id).strip() == "":
+        warnings.append(
+            "Configuration is missing a device 'id'. "
+            "This radio may default to index 0 and conflict with others."
+        )
 
     return warnings
