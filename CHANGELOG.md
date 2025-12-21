@@ -1,4 +1,6 @@
 # Changelog
+## v1.1.6
+- **NEW:** RTL-SDR mis-configuratrion warnings
 ## v1.1.5
 - **FIX:** crash & JSON debug fix
 ## v1.1.3
