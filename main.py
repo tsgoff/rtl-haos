@@ -3,7 +3,7 @@
 FILE: main.py
 DESCRIPTION:
   The main executable script.
-  - UPDATED: Standardized warning formats so all radio warnings use [Radio: Name/ID].
+  - UPDATED: Now warns about Duplicate IDs in both Hardware (physical collisions) and Config (copy-paste errors).
 """
 import os
 import sys
@@ -148,6 +148,20 @@ def main():
     print("[STARTUP] Scanning USB bus for RTL-SDR devices...")
     detected_devices = discover_rtl_devices()
     
+    # --- NEW: Check for Physical Duplicates (Hardware Collision) ---
+    serial_counts = {}
+    if detected_devices:
+        for d in detected_devices:
+            sid = str(d.get('id', ''))
+            serial_counts[sid] = serial_counts.get(sid, 0) + 1
+            if 'id' in d and 'index' in d:
+                pass # Just iterating to count
+
+        for sid, count in serial_counts.items():
+            if count > 1:
+                print(f"[STARTUP] WARNING: [Hardware] Multiple SDRs detected with same Serial '{sid}'. IDs must be unique for precise mapping. Use rtl_eeprom to fix.")
+    # ---------------------------------------------------------------
+
     serial_to_index = {}
     if detected_devices:
         for d in detected_devices:
@@ -163,9 +177,9 @@ def main():
         # --- A. MANUAL CONFIGURATION MODE ---
         print(f"[STARTUP] Loading {len(rtl_config)} radios from manual config.")
         configured_ids = set()
+        seen_config_ids = set() # To track duplicates in JSON
 
         for radio in rtl_config:
-            # Get Name First for clearer Warning
             r_name = radio.get("name", "Unknown")
             
             warns = validate_radio_config(radio)
@@ -174,6 +188,13 @@ def main():
 
             target_id = radio.get("id") 
             if target_id: target_id = str(target_id).strip()
+            
+            # --- NEW: Check for Configuration Duplicates (User Error) ---
+            if target_id and target_id in seen_config_ids:
+                print(f"[STARTUP] CONFIG WARNING: [Radio: {r_name}] Duplicate ID '{target_id}' found in settings. This radio will conflict with previous entries.")
+            if target_id:
+                seen_config_ids.add(target_id)
+            # -----------------------------------------------------------
             
             if target_id and target_id in serial_to_index:
                 idx = serial_to_index[target_id]
@@ -195,7 +216,6 @@ def main():
             for d in detected_devices:
                 d_id = str(d.get("id"))
                 if d_id not in configured_ids:
-                    # --- FIXED: Use [Radio: Serial X] format ---
                     print(f"[STARTUP] WARNING: [Radio: Serial {d_id}] Detected but NOT configured. It is currently idle.")
             
     else:
