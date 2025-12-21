@@ -238,15 +238,25 @@ def main():
             time.sleep(5)
             
     else:
-        # --- B. SMART AUTO-CONFIGURATION MODE ---
+# --- B. SMART AUTO-CONFIGURATION MODE ---
         if detected_devices:
             print(f"[STARTUP] Auto-detected {len(detected_devices)} radios.")
             print(f"[STARTUP] Unconfigured Mode: Starting PRIMARY radio only.")
 
             dev = detected_devices[0]
 
+            # 1. SMART DEFAULT LOGIC
+            # Check if the default frequency string implies hopping (has commas).
+            # If NOT, we force hop_interval to 0 to prevent the startup warning,
+            # ignoring the global default of 60s.
+            def_freqs = config.RTL_DEFAULT_FREQ.split(",")
+            def_hop = config.RTL_DEFAULT_HOP_INTERVAL
+            
+            if len(def_freqs) < 2:
+                def_hop = 0
+
             radio_setup = {
-                "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL,
+                "hop_interval": def_hop,
                 "rate": config.RTL_DEFAULT_RATE,
                 "freq": config.RTL_DEFAULT_FREQ
             }
@@ -258,6 +268,7 @@ def main():
             # ---------------------------------------
             
             print(f"[STARTUP] Radio #1 ({dev['name']}) -> Defaulting to {radio_setup['freq']}")
+            
             
             if len(detected_devices) > 1:
                 print(f"[STARTUP] Note: {len(detected_devices)-1} other device(s) ignored in auto-mode. Configure them in options.json to use.")
