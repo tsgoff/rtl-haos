@@ -98,7 +98,7 @@ def check_dependencies():
         print("CRITICAL: Python dependency 'paho-mqtt' not found.")
         sys.exit(1)
 
-check_dependencies()
+
 
 import config
 from mqtt_handler import HomeNodeMQTT
@@ -132,6 +132,7 @@ def show_logo(version):
     sys.stdout.flush()
 
 def main():
+    check_dependencies()
     ver = get_version()
     show_logo(ver)
     time.sleep(3)
