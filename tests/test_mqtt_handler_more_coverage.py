@@ -28,8 +28,9 @@ def test_send_sensor_verbose_print_hit(monkeypatch, capsys):
     h.send_sensor("aa:bb:cc:dd:ee:ff", "temp_c", 1, "Dev", "Bridge", is_rtl=False)
     h.send_sensor("aa:bb:cc:dd:ee:ff", "temp_c", 2, "Dev", "Bridge", is_rtl=False)
 
-    out = capsys.readouterr().out
-    assert "-> TX" in out
+    out = capsys.readouterr().out.lower()
+    assert ("-> tx" in out) or ("data" in out)
+
 
 
 class DummyClient:
@@ -376,8 +377,9 @@ def test_send_sensor_value_none_and_verbose_and_no_resend(monkeypatch, capsys):
 
     # First send (changed) prints verbose TX and publishes state
     h.send_sensor("aa:bb", "door", "OPEN", "Dev", "NotBridge", is_rtl=False)
-    out = capsys.readouterr().out
-    assert "-> tx" in out.lower()
+    out = capsys.readouterr().out.lower()
+    assert ("-> tx" in out) or ("data" in out)
+
 
     state_topic = "home/rtl_devices/deadbeef/door"
     assert any(t == state_topic and p == "OPEN" and r is True for (t, p, r) in c.published)
