@@ -8,7 +8,7 @@ def test_discovery_payload_structure(mocker):
     required by Home Assistant.
     """
     # 1. Setup
-    mocker.patch("paho.mqtt.client.Client")
+    mocker.patch("mqtt_handler.mqtt.Client")
     handler = HomeNodeMQTT(version="1.0.0")
     handler.start()
     

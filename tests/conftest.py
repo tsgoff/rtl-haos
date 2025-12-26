@@ -3,6 +3,8 @@ import os
 import sys
 import types
 import importlib.machinery
+import unittest.mock as um
+
 import pytest
 
 # Ensure we can import project modules from repo root
@@ -18,12 +20,74 @@ except ImportError:
     sys.modules["psutil"] = stub
 
 
+# ---------------------------------------------------------------------------
+# Minimal "mocker" fixture (fallback)
+# ---------------------------------------------------------------------------
+#
+# This repo uses the pytest-mock fixture name (`mocker`) extensively.
+# If pytest-mock is installed, it will provide the real fixture.
+# If it isn't, we provide a tiny compatible shim that supports what the tests
+# in this repository actually use:
+#   - mocker.patch(...)
+#   - mocker.patch.object(...)
+#   - mocker.Mock(), mocker.MagicMock()
+#
+try:
+    import pytest_mock  # noqa: F401
+    _HAS_PYTEST_MOCK = True
+except Exception:
+    _HAS_PYTEST_MOCK = False
+
+
+if not _HAS_PYTEST_MOCK:
+
+    class _Patcher:
+        def __init__(self, parent: "_SimpleMocker"):
+            self._parent = parent
+
+        def __call__(self, target, *args, **kwargs):
+            p = um.patch(target, *args, **kwargs)
+            m = p.start()
+            self._parent._patches.append(p)
+            return m
+
+        def object(self, target, attribute, *args, **kwargs):
+            p = um.patch.object(target, attribute, *args, **kwargs)
+            m = p.start()
+            self._parent._patches.append(p)
+            return m
+
+    class _SimpleMocker:
+        def __init__(self):
+            self._patches = []
+            self.patch = _Patcher(self)
+
+            # Convenience aliases used by tests
+            self.Mock = um.Mock
+            self.MagicMock = um.MagicMock
+
+        def stopall(self):
+            for p in reversed(self._patches):
+                try:
+                    p.stop()
+                except RuntimeError:
+                    # Patch already stopped
+                    pass
+            self._patches.clear()
+
+    @pytest.fixture
+    def mocker():
+        m = _SimpleMocker()
+        try:
+            yield m
+        finally:
+            m.stopall()
+
+
 @pytest.fixture
 def mock_config(mocker):
-    """
-    Patches the configuration so tests can control settings
-    (like blacklist/whitelist) without relying on env files.
-    """
+    """Patches configuration so tests can control settings without env files."""
+
     mocker.patch("config.BRIDGE_ID", "TEST_BRIDGE")
     mocker.patch("config.BRIDGE_NAME", "Test Home")
 

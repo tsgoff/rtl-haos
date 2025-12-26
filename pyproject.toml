@@ -45,3 +45,15 @@ known-first-party = [
   "utils",
   "field_meta",
 ]
+
+[tool.coverage.run]
+branch = true
+source = ["."]
+omit = [
+  "tests/*",
+  "*/__init__.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

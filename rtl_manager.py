@@ -538,9 +538,8 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                     # Ignore common noise
                     if "detached kernel driver" in low or "detaching kernel driver" in low:
                         continue
-                    if "using device" in low or ("found" in low and "device" in low):
-                        continue
 
+                    # --- Friendly HA status mappings (check BEFORE noise filters) ---
                     status = None
                     if "no supported devices" in low or "no matching device" in low or "found 0 device" in low:
                         status = "Error: No RTL-SDR device found"
@@ -555,8 +554,19 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
 
                     if status is not None:
                         last_error_line = raw[:160]
-                        _publish_radio_status(mqtt_handler, sys_id, sys_model, status_field, status, friendly_name=status_friendly)
+                        _publish_radio_status(
+                            mqtt_handler,
+                            sys_id,
+                            sys_model,
+                            status_field,
+                            status,
+                            friendly_name=status_friendly,
+                        )
+                        continue
 
+                    # Ignore startup chatter that isn't actionable
+                    if "using device" in low or ("found" in low and "device" in low):
+                        continue
                 except Exception as e:
                     print(f"[RTL] Error processing line: {e}")
 

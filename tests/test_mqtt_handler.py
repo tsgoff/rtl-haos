@@ -7,7 +7,7 @@ def test_subscriptions_on_connect(mocker):
     Verifies that we actually subscribe to the Command topics when we connect.
     """
     # 1. Setup
-    mocker.patch("paho.mqtt.client.Client")
+    mocker.patch("mqtt_handler.mqtt.Client")
     handler = HomeNodeMQTT()
     
     # Mock the subscribe method
@@ -30,7 +30,7 @@ def test_unknown_field_fallback(mocker):
     instead of crashing or dropping it.
     """
     # 1. Setup
-    mocker.patch("paho.mqtt.client.Client")
+    mocker.patch("mqtt_handler.mqtt.Client")
     handler = HomeNodeMQTT()
     handler.start()
     mock_publish = handler.client.publish
@@ -54,7 +54,7 @@ def test_unknown_field_fallback(mocker):
 def test_mqtt_discovery_payload(mocker, mock_config):
     """Verifies the JSON payload sent to Home Assistant config topic."""
     # Mock the internal client
-    mock_paho = mocker.patch("paho.mqtt.client.Client")
+    mock_paho = mocker.patch("mqtt_handler.mqtt.Client")
     mock_client_instance = mock_paho.return_value
     
     handler = HomeNodeMQTT()
