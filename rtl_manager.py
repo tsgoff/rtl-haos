@@ -107,7 +107,6 @@ def flatten(d, sep="_") -> dict:
 
     recurse(d)
     return obj
-
 def _debug_dump_packet(
     *,
     raw_line: str,
@@ -121,11 +120,11 @@ def _debug_dump_packet(
     """
     Debug helper for reverse-engineering unknown devices.
 
-    Goals:
-      - Preserve a copy/paste-friendly raw JSON line (no log prefixes).
-      - Surface the rtl_433-provided timestamp ("time") clearly.
-      - Show the flattened keys exactly as this bridge will treat them.
-      - Show which fields will be published and which are missing FIELD_META.
+    Highlights:
+      - UNSUPPORTED = published field missing FIELD_META entry
+      - Prints FIELD_META stubs for quick copy/paste
+      - Preserves rtl_433's own "time" field
+      - Prints raw JSON as a clean single line (no prefixes)
     """
     try:
         from field_meta import FIELD_META
@@ -133,27 +132,28 @@ def _debug_dump_packet(
         FIELD_META = {}
 
     skip = set(getattr(config, "SKIP_KEYS", []) or [])
+
     rtl_time = None
     try:
         rtl_time = (data_raw or {}).get("time")
     except Exception:
         rtl_time = None
 
-    # Summary (goes through timestamped_print wrapper)
+    # --- Header / summary (goes through project's print wrapper) ---
     print(
         f"[JSONDUMP] radio={radio_name} freq={radio_freq} model={model} id={clean_id} rtl_time={rtl_time or 'Unknown'}"
     )
 
-    # Raw JSON (must be copy/paste-friendly; bypass timestamped_print)
+    # --- Raw JSON (copy/paste friendly; bypass timestamped_print) ---
     print("[JSONDUMP] RAW_JSON_BEGIN (copy the next line)")
     try:
         sys.__stdout__.write(raw_line.rstrip("\n") + "\n")
         sys.__stdout__.flush()
     except Exception:
-        # Fallback if stdout is unavailable
         print(raw_line)
     print("[JSONDUMP] RAW_JSON_END")
 
+    # --- Flattened raw + processed ---
     flat_raw = flatten(data_raw or {})
     flat_proc = flatten(data_processed or {})
 
@@ -162,14 +162,58 @@ def _debug_dump_packet(
             return f"{v:.6g}"
         return repr(v)
 
+    # Show skipped keys present (useful context)
+    skipped_present = [k for k in sorted(flat_raw.keys()) if k in skip]
+    if skipped_present:
+        print(f"[JSONDUMP] SKIP_KEYS present (not published): {', '.join(skipped_present)}")
+
     print(f"[JSONDUMP] RAW keys ({len(flat_raw)}):")
     for k in sorted(flat_raw.keys()):
         v = flat_raw[k]
         t = type(v).__name__
         print(f"[JSONDUMP]   {k} = {_fmt(v)} ({t})")
 
-    # Build publish plan (mirrors dispatch logic below)
+    # Build the exact publish plan (mirrors rtl_loop dispatch logic).
     planned = []
+
+    # --- Derived / special-case publishes that don't exist in the final flat dict ---
+    try:
+        # Neptune R900: consumption / 10 -> meter_reading
+        if "Neptune-R900" in (model or ""):
+            cons = (data_raw or {}).get("consumption")
+            if cons is not None:
+                planned.append(
+                    {
+                        "field": "meter_reading",
+                        "value": float(cons) / 10.0,
+                        "source": "Neptune-R900: consumption/10",
+                    }
+                )
+
+        # SCM / ERT: consumption -> Consumption
+        if (("SCM" in (model or "")) or ("ERT" in (model or ""))) and (data_raw or {}).get("consumption") is not None:
+            planned.append(
+                {
+                    "field": "Consumption",
+                    "value": (data_raw or {}).get("consumption"),
+                    "source": "SCM/ERT: consumption",
+                }
+            )
+
+        # Dew point: computed from temp + humidity (published separately in rtl_loop)
+        t_c = (data_raw or {}).get("temperature_C")
+        if t_c is None and (data_raw or {}).get("temperature_F") is not None:
+            t_c = (((data_raw or {})["temperature_F"] - 32) * 5) / 9
+
+        if t_c is not None and (data_raw or {}).get("humidity") is not None:
+            dp_f = calculate_dew_point(t_c, (data_raw or {}).get("humidity"))
+            if dp_f is not None:
+                planned.append({"field": "dew_point", "value": dp_f, "source": "derived: dew_point"})
+    except Exception:
+        # Debug mode should never break the radio loop
+        pass
+
+    # --- Normal flattened publishes ---
     for key, value in flat_proc.items():
         if key in skip:
             continue
@@ -181,27 +225,54 @@ def _debug_dump_packet(
         else:
             planned.append({"field": key, "value": value, "source": key})
 
-    print(f"[JSONDUMP] PUBLISH plan ({len(planned)} fields):")
-    missing = set()
+    # Collapse duplicates (keep first occurrence) so “derived” doesn’t spam if decoder also provides it
+    seen_fields = set()
+    planned_dedup = []
     for item in planned:
+        f = item["field"]
+        if f in seen_fields:
+            continue
+        seen_fields.add(f)
+        planned_dedup.append(item)
+
+    # --- Highlight support status ---
+    default_icon = "mdi:eye"
+
+    def _default_friendly(field: str) -> str:
+        return field.replace("_", " ").strip().title().replace('"', "'")
+
+    print(f"[JSONDUMP] PUBLISH plan ({len(planned_dedup)} fields):")
+    missing = set()
+
+    for item in planned_dedup:
         field = item["field"]
         value = item["value"]
         source = item["source"]
 
         meta = FIELD_META.get(field)
+
         if meta:
             unit, dev_class, icon, friendly = meta
-            meta_s = f"unit={unit or '-'} class={dev_class or '-'} name={friendly or '-'}"
+            prefix = "[SUPPORTED ]"
+            meta_s = f"unit={unit or '-'} class={dev_class or '-'} icon={icon or '-'} name={friendly or '-'}"
         else:
-            meta_s = "(NO FIELD_META)"
+            # This is what mqtt_handler will effectively do: default_meta
+            prefix = "[!! UNSUPPORTED !!]"
             missing.add(field)
+            friendly = _default_friendly(field)
+            meta_s = f"FALLBACK unit=- class=none icon={default_icon} name={friendly}"
 
-        print(f"[JSONDUMP]   {field} = {_fmt(value)}  <= {source}  {meta_s}")
+        print(f"[JSONDUMP] {prefix} {field} = {_fmt(value)}  <= {source}  {meta_s}")
 
     if missing:
-        print(f"[JSONDUMP] Missing FIELD_META ({len(missing)}): {', '.join(sorted(missing))}")
+        print(f"[JSONDUMP] UNSUPPORTED fields missing FIELD_META ({len(missing)}): {', '.join(sorted(missing))}")
+        print("[JSONDUMP] FIELD_META stubs (paste into field_meta.py):")
+        for f in sorted(missing):
+            friendly = _default_friendly(f)
+            print(f'[JSONDUMP]   "{f}": (None, "none", "{default_icon}", "{friendly}"),')
 
     print("[JSONDUMP] END\n")
+
 
 def is_blocked_device(clean_id: str, model: str, dev_type: str) -> bool:
     patterns = getattr(config, "DEVICE_BLACKLIST", [])
