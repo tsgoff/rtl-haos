@@ -265,7 +265,7 @@ def _debug_dump_packet(
         print(f"[JSONDUMP] {prefix} {field} = {_fmt(value)}  <= {source}  {meta_s}")
 
     if missing:
-        print(f"[JSONDUMP] UNSUPPORTED fields missing FIELD_META ({len(missing)}): {', '.join(sorted(missing))}")
+        print(f"[JSONDUMP] unsupported fields missing FIELD_META ({len(missing)}): {', '.join(sorted(missing))}")
         print("[JSONDUMP] FIELD_META stubs (paste into field_meta.py):")
         for f in sorted(missing):
             friendly = _default_friendly(f)
