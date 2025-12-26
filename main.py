@@ -114,7 +114,9 @@ def get_version():
             with open(cfg_path, "r") as f:
                 for line in f:
                     if line.strip().startswith("version:"):
-                        return f"v{line.split(':', 1)[1].strip().replace('\"', '').replace('\'', '')}"
+                        ver = line.split(':', 1)[1].strip()
+                        ver = ver.strip().strip('\"').strip("'")
+                        return f"v{ver}"
     except Exception:
         pass
     return "Unknown"
@@ -223,7 +225,8 @@ def main():
         # --- B. SMART AUTO-CONFIGURATION MODE ---
         if detected_devices:
             print(f"[STARTUP] Auto-detected {len(detected_devices)} radios.")
-            print(f"[STARTUP] Unconfigured Mode: Starting PRIMARY radio only.")
+            print("[STARTUP] Unconfigured Mode: Starting PRIMARY radio only.")
+
 
             dev = detected_devices[0]
             dev_name = dev.get("name", "Primary")

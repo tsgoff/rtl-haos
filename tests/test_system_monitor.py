@@ -100,7 +100,7 @@ if __name__ == "__main__":
     BASE_DEVICE_ID = get_system_mac().replace(":","").lower()
     BASE_MODEL_NAME = config.BRIDGE_NAME
     
-    print(f"--- SYSTEM MONITOR STARTING ---")
+    print("--- SYSTEM MONITOR STARTING ---")
 
     mqtt_handler = HomeNodeMQTT()
     mqtt_handler.start()

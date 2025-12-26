@@ -9,13 +9,76 @@ import json
 import threading
 import sys
 import time
-import paho.mqtt.client as mqtt
-from paho.mqtt.enums import CallbackAPIVersion
+# MQTT client (optional during unit tests)
+try:
+    import paho.mqtt.client as mqtt
+    from paho.mqtt.enums import CallbackAPIVersion
+except ModuleNotFoundError:  # pragma: no cover
+    class CallbackAPIVersion:  # minimal shim
+        VERSION2 = 2
+
+    class _DummyMQTTClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def username_pw_set(self, *_args, **_kwargs):
+            pass
+
+        def will_set(self, *_args, **_kwargs):
+            pass
+
+        def connect(self, *_args, **_kwargs):
+            raise ModuleNotFoundError("paho-mqtt is required to use MQTT")
+
+        def loop_start(self):
+            pass
+
+        def loop_stop(self):
+            pass
+
+        def disconnect(self):
+            pass
+
+        def publish(self, *_args, **_kwargs):
+            pass
+
+        def subscribe(self, *_args, **_kwargs):
+            pass
+
+        def unsubscribe(self, *_args, **_kwargs):
+            pass
+
+    class _DummyMQTTModule:
+        Client = _DummyMQTTClient
+
+    mqtt = _DummyMQTTModule()
 # Local imports
 import config
 from utils import clean_mac, get_system_mac
 from field_meta import FIELD_META
 from rtl_manager import trigger_radio_restart
+
+
+def _parse_boolish(value):
+    """Best-effort conversion to bool.
+
+    Returns:
+      - True / False when the value is clearly interpretable
+      - None when it is not
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in {"1", "true", "on", "yes", "ok", "good"}:
+            return True
+        if v in {"0", "false", "off", "no", "low", "bad"}:
+            return False
+    return None
 
 class HomeNodeMQTT:
     def __init__(self, version="Unknown"):
@@ -32,6 +95,13 @@ class HomeNodeMQTT:
         self.discovery_published = set()
         self.last_sent_values = {}
         self.tracked_devices = set()
+
+        # Track one-time migrations (e.g., entity type/domain changes)
+        self.migration_cleared = set()
+
+        # Battery alert state (battery_ok -> Battery Low)
+        # Keyed by clean_id (device base unique id).
+        self._battery_state: dict[str, dict] = {}
         
         self.discovery_lock = threading.Lock()
 
@@ -183,7 +253,7 @@ class HomeNodeMQTT:
             self.last_sent_values.clear()
             self.tracked_devices.clear()
 
-        print(f"[NUKE] Scan Complete. All identified entities removed.")
+        print("[NUKE] Scan Complete. All identified entities removed.")
         self.client.publish(self.TOPIC_AVAILABILITY, "online", retain=True)
         self._publish_nuke_button()
         self._publish_restart_button()
@@ -203,12 +273,22 @@ class HomeNodeMQTT:
         self.client.loop_stop()
         self.client.disconnect()
 
-    def _publish_discovery(self, sensor_name, state_topic, unique_id, device_name, device_model, friendly_name_override=None):
+    def _publish_discovery(
+        self,
+        sensor_name,
+        state_topic,
+        unique_id,
+        device_name,
+        device_model,
+        friendly_name_override=None,
+        domain="sensor",
+        extra_payload=None,
+    ):
         unique_id = f"{unique_id}{config.ID_SUFFIX}"
 
         with self.discovery_lock:
             if unique_id in self.discovery_published:
-                return
+                return False
 
             default_meta = (None, "none", "mdi:eye", sensor_name.replace("_", " ").title())
             
@@ -257,46 +337,142 @@ class HomeNodeMQTT:
                 "icon": icon,
             }
 
-            if unit: payload["unit_of_measurement"] = unit
-            if device_class != "none": payload["device_class"] = device_class
-            if entity_cat: payload["entity_category"] = entity_cat
+            # Common fields across MQTT discovery platforms
+            if device_class != "none":
+                payload["device_class"] = device_class
+            if entity_cat:
+                payload["entity_category"] = entity_cat
 
-            if device_class in ["gas", "energy", "water", "monetary", "precipitation"]:
-                payload["state_class"] = "total_increasing"
-            if device_class in ["temperature", "humidity", "pressure", "illuminance", "voltage","wind_speed","moisture"]:
-                payload["state_class"] = "measurement"
-            if device_class in ["wind_direction"]:
-                payload["state_class"] = "measurement_angle"
+            # Sensor-only fields
+            if domain == "sensor":
+                if unit:
+                    payload["unit_of_measurement"] = unit
+
+                if device_class in ["gas", "energy", "water", "monetary", "precipitation"]:
+                    payload["state_class"] = "total_increasing"
+                if device_class in ["temperature", "humidity", "pressure", "illuminance", "voltage", "wind_speed", "moisture"]:
+                    payload["state_class"] = "measurement"
+                if device_class in ["wind_direction"]:
+                    payload["state_class"] = "measurement_angle"
+
+            if extra_payload:
+                payload.update(extra_payload)
 
             if "version" not in sensor_name.lower() and not sensor_name.startswith("radio_status"):
-                payload["expire_after"] = config.RTL_EXPIRE_AFTER
+                # Battery status is often reported infrequently; avoid flapping to "unavailable".
+                if sensor_name == "battery_ok":
+                    payload["expire_after"] = max(int(config.RTL_EXPIRE_AFTER), 86400)
+                else:
+                    payload["expire_after"] = config.RTL_EXPIRE_AFTER
             
             payload["availability_topic"] = self.TOPIC_AVAILABILITY
 
-            config_topic = f"homeassistant/sensor/{unique_id}/config"
+            config_topic = f"homeassistant/{domain}/{unique_id}/config"
             self.client.publish(config_topic, json.dumps(payload), retain=True)
             self.discovery_published.add(unique_id)
+            return True
 
     def send_sensor(self, sensor_id, field, value, device_name, device_model, is_rtl=True, friendly_name=None):
-        if value is None: return
+        if value is None:
+            return
 
         self.tracked_devices.add(device_name)
+
         clean_id = clean_mac(sensor_id) 
         unique_id_base = clean_id
         state_topic_base = clean_id
 
         unique_id = f"{unique_id_base}_{field}"
-        state_topic = f"home/rtl_devices/{state_topic_base}/{field}" 
+        state_topic = f"home/rtl_devices/{state_topic_base}/{field}"
 
-        self._publish_discovery(field, state_topic, unique_id, device_name, device_model, friendly_name_override=friendly_name)
+        # Field-specific transforms / entity types
+        domain = "sensor"
+        extra_payload = None
+        out_value = value
+
+
+        # battery_ok: 1/True => battery OK, 0/False => battery LOW
+        # Home Assistant's binary_sensor device_class "battery" expects:
+        #   ON  => low
+        #   OFF => normal
+        if field == "battery_ok":
+            ok = _parse_boolish(value)
+            if ok is None:
+                return
+
+            now = time.time()
+            st = self._battery_state.setdefault(
+                clean_id,
+                {
+                    "latched_low": False,
+                    "last_low": None,
+                    "ok_candidate_since": None,
+                    "ok_since": None,
+                },
+            )
+
+            # Update latch
+            if not ok:
+                st["latched_low"] = True
+                st["last_low"] = now
+                st["ok_candidate_since"] = None
+                st["ok_since"] = None
+                low = True
+            else:
+                if st.get("latched_low"):
+                    if st.get("ok_candidate_since") is None:
+                        st["ok_candidate_since"] = now
+
+                    clear_after = int(getattr(config, "BATTERY_OK_CLEAR_AFTER", 0) or 0)
+                    if clear_after <= 0 or (now - st["ok_candidate_since"]) >= clear_after:
+                        st["latched_low"] = False
+                        st["ok_candidate_since"] = None
+                        st["ok_since"] = now
+                        low = False
+                    else:
+                        low = True
+                else:
+                    # Already OK and not latched
+                    if st.get("ok_since") is None:
+                        st["ok_since"] = now
+                    low = False
+
+            domain = "binary_sensor"
+            out_value = "ON" if low else "OFF"
+            extra_payload = {"payload_on": "ON", "payload_off": "OFF"}
+
+            # Migration helper: if an older numeric sensor existed, remove its discovery config.
+            # Only do this once per runtime to avoid extra traffic.
+            unique_id_v2 = f"{unique_id}{config.ID_SUFFIX}"
+            if unique_id_v2 not in self.migration_cleared:
+                old_sensor_config = f"homeassistant/sensor/{unique_id_v2}/config"
+                self.client.publish(old_sensor_config, "", retain=True)
+                with self.discovery_lock:
+                    self.discovery_published.discard(unique_id_v2)
+                self.migration_cleared.add(unique_id_v2)
+
+            if friendly_name is None:
+                friendly_name = "Battery Low"
+
+        discovery_published_now = self._publish_discovery(
+            field,
+            state_topic,
+            unique_id,
+            device_name,
+            device_model,
+            friendly_name_override=friendly_name,
+            domain=domain,
+            extra_payload=extra_payload,
+        )
 
         unique_id_v2 = f"{unique_id}{config.ID_SUFFIX}"
-        value_changed = self.last_sent_values.get(unique_id_v2) != value
+        value_changed = (self.last_sent_values.get(unique_id_v2) != out_value) or bool(discovery_published_now)
 
         if value_changed or is_rtl:
-            self.client.publish(state_topic, str(value), retain=True)
-            self.last_sent_values[unique_id_v2] = value
+            self.client.publish(state_topic, str(out_value), retain=True)
+            self.last_sent_values[unique_id_v2] = out_value
+
             if value_changed:
                 # --- NEW: Check Verbosity Setting ---
                 if config.VERBOSE_TRANSMISSIONS:
-                    print(f" -> TX {device_name} [{field}]: {value}")
+                    print(f" -> TX {device_name} [{field}]: {out_value}")

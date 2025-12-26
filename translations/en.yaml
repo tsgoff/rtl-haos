@@ -36,6 +36,12 @@ configuration:
       If disabled (default), only a summary line ("Flushed X readings...") is printed
       every throttle interval.
 
+  battery_ok_clear_after:
+    name: Battery Clear Delay
+    description: >-
+      Seconds the battery must remain OK before clearing a LOW alert.
+      Set to 0 to clear immediately.
+
   rtl_config:
     name: Radio Configuration
     description: >-

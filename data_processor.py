@@ -12,6 +12,13 @@ import time
 import statistics
 import config
 
+
+# Numeric fields that should NOT be averaged during throttling.
+# Instead, we publish the last valid value observed during the interval.
+NON_AVERAGED_NUMERIC_FIELDS = {
+    "battery_ok",
+}
+
 class DataProcessor:
     def __init__(self, mqtt_handler):
         self.mqtt_handler = mqtt_handler
@@ -26,6 +33,10 @@ class DataProcessor:
         Otherwise, stores it in the buffer.
         """
         interval = getattr(config, "RTL_THROTTLE_INTERVAL", 0)
+
+        # Skip null readings; they shouldn't influence averages or "last known" decisions.
+        if value is None:
+            return
         
         # 1. Immediate Dispatch (No Throttling)
         if interval <= 0:
@@ -95,9 +106,12 @@ class DataProcessor:
                     # Calculate Average (or last known value for strings)
                     final_val = None
                     try:
-                        if isinstance(values[0], (int, float)):
+                        if field in NON_AVERAGED_NUMERIC_FIELDS:
+                            # E.g. battery_ok: publish the last valid sample, not the mean.
+                            final_val = values[-1]
+                        elif isinstance(values[0], (int, float)):
                             final_val = round(statistics.mean(values), 2)
-                            if final_val.is_integer(): 
+                            if final_val.is_integer():
                                 final_val = int(final_val)
                         else:
                             final_val = values[-1]

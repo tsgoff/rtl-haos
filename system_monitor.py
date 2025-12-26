@@ -101,21 +101,22 @@ def system_stats_loop(mqtt_handler, DEVICE_ID, MODEL_NAME):
 
 if __name__ == "__main__":
     BASE_DEVICE_ID = get_system_mac().replace(":","").lower()
-    BBASE_MODEL_NAME = config.BRIDGE_NAME
-    
-    print(f"--- SYSTEM MONITOR STARTING ---")
+    BASE_MODEL_NAME = config.BRIDGE_NAME
+
+    print("--- SYSTEM MONITOR STARTING ---")
 
     mqtt_handler = HomeNodeMQTT()
     mqtt_handler.start()
 
     threading.Thread(
-        target=system_stats_loop, 
-        args=(mqtt_handler, BASE_DEVICE_ID, BASE_MODEL_NAME), 
+        target=system_stats_loop,
+        args=(mqtt_handler, BASE_DEVICE_ID, BASE_MODEL_NAME),
         daemon=True
     ).start()
 
     try:
-        while True: time.sleep(1)
+        while True:
+            time.sleep(1)
     except KeyboardInterrupt:
         print("\n[SHUTDOWN] Stopping MQTT...")
         mqtt_handler.stop()

@@ -1,4 +1,12 @@
 # Changelog
+## v1.1.10
+### New: Low Battery alert
+- **NEW:** Adds a Home Assistant **Battery Low** `binary_sensor` based on `battery_ok`.
+  - HA shows **LOW** when `battery_ok=0`
+  - HA shows **OK** when `battery_ok=1`
+- **NEW:** **Battery clear delay** via `battery_ok_clear_after`:
+  - `0` = clear LOW immediately on the next OK report
+  - `>0` = LOW only clears after `battery_ok` stays OK for that many seconds (helps prevent flapping)
 ## v1.1.9  
 - **FIX:** Added -M level back to rtl_433 cmd for radio signal metrics
 ## v1.1.8

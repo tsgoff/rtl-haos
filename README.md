@@ -224,17 +224,16 @@ Go to the **Configuration** tab and set your options:
 
 ```yaml
 # MQTT Settings
-mqtt_host: ""  # Leave blank to auto-use the Home Assistant MQTT service (or set to "core-mosquitto"/broker IP)
+mqtt_host: ""          # Leave blank to auto-use the Home Assistant MQTT service (or set to core-mosquitto / broker IP)
 mqtt_user: your_mqtt_user
 mqtt_pass: your_mqtt_password
 
-bridge_name: "rtl-haos-bridge"        # unique ID for system metrics device
-
-rtl_default_freq: "433.92M"           # or "433.92M, 315M, 915M"
-rtl_default_hop_interval: 60          # only used when multiple freqs set
+# Bridge identity (keeps your HA device stable)
+bridge_id: "42"
+bridge_name: "rtl-haos-bridge"
 ```
 
-> **Note:** The add-on will automatically use the Home Assistant MQTT service if available and `mqtt_host` is left blank.
+> **Note:** If `mqtt_host` is left blank, the add-on will try to use Home Assistant's Mosquitto service.
 
 **Advanced Configuration (Optional, default values shown below):**
 
@@ -243,6 +242,11 @@ rtl_default_hop_interval: 60          # only used when multiple freqs set
 rtl_expire_after: 600 # Seconds before sensor marked unavailable
 rtl_throttle_interval: 30 # Seconds to buffer/average data (0 = realtime)
 debug_raw_json: false # Print raw rtl_433 JSON for debugging
+
+# Battery alert behavior (battery_ok -> Battery Low binary_sensor)
+# 0 clears immediately on next OK
+battery_ok_clear_after: 300
+# Note: Battery Low uses a long MQTT expire_after (24h+) to avoid going 'unavailable' for devices that report battery infrequently.
 
 # Multi-Radio Configuration (leave empty for auto-detection)
 rtl_config:
@@ -418,6 +422,23 @@ Notes:
 
 
 ---
+
+### 🪫 Battery Low (battery_ok)
+
+If `rtl_433` reports a `battery_ok` field for a device, RTL-HAOS publishes a Home Assistant
+**Battery Low** `binary_sensor`:
+
+- `battery_ok = 0` → **Battery Low = ON** (LOW)
+- `battery_ok = 1` → **Battery Low = OFF** (OK)
+
+**Battery clear delay:** `battery_ok_clear_after` controls when LOW clears:
+
+- `0` clears LOW immediately on the next OK report
+- `>0` clears LOW only after `battery_ok` has remained OK for that many seconds (helps prevent flapping)
+
+> Note: Many devices report battery infrequently. Battery Low uses a long MQTT `expire_after`
+> (24h minimum) so it won’t quickly flip to “unavailable” just because no new `battery_ok`
+> value was included in recent packets.
 
 ## 🔧 Advanced: Multi-Radio Setup (Critical)
 

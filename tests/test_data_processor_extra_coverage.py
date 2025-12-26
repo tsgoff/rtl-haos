@@ -162,3 +162,34 @@ def test_start_throttle_loop_empty_buffer_continues(monkeypatch):
         dp.start_throttle_loop()
 
     assert mqtt.calls == []
+
+
+def test_throttle_battery_ok_uses_last_value_not_mean(monkeypatch):
+    """battery_ok should not be averaged; last sample wins."""
+    monkeypatch.setattr(config, "RTL_THROTTLE_INTERVAL", 1)
+
+    mqtt = DummyMQTT()
+    dp = data_processor.DataProcessor(mqtt)
+
+    # Seed buffer with multiple battery_ok values that would differ from the mean.
+    with dp.lock:
+        dp.buffer = {
+            "dev_batt": {
+                "__meta__": {"name": "Dev", "model": "Model", "radio": "RTL", "freq": "433.92M"},
+                "battery_ok": [1, 0, 1],  # mean=0.67, last=1
+            }
+        }
+
+    calls = {"n": 0}
+
+    def fake_sleep(_seconds):
+        calls["n"] += 1
+        if calls["n"] >= 2:
+            raise InterruptedError("stop loop")
+
+    monkeypatch.setattr(data_processor.time, "sleep", fake_sleep)
+
+    with pytest.raises(InterruptedError):
+        dp.start_throttle_loop()
+
+    assert any(c["clean_id"] == "dev_batt" and c["field"] == "battery_ok" and c["value"] == 1 for c in mqtt.calls)
