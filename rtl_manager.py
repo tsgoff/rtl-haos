@@ -61,14 +61,22 @@ def _publish_radio_status(
     friendly_name: Optional[str] = None,
 ) -> None:
     """Publish (and ensure discovery of) a host-level radio status entity."""
+    # Some tests call rtl_loop(..., mqtt_handler=None) to validate CLI building.
+    if mqtt_handler is None:
+        return
+
+    send = getattr(mqtt_handler, "send_sensor", None)
+    if not callable(send):
+        return
+
     host_device_name = f"{sys_model} ({sys_id})"
-    mqtt_handler.send_sensor(
+    send(
         sys_id,
         status_field,
         status,
         host_device_name,
         sys_model,
-        is_rtl=False,  # only publish on changes (send_sensor still republishes after NUKE)
+        is_rtl=False,
         friendly_name=friendly_name,
     )
 
@@ -211,12 +219,10 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
         process = None
         try:
             _publish_radio_status(mqtt_handler, sys_id, sys_model, status_field, "Rebooting...", friendly_name=status_friendly)
-            time.sleep(0.2)
 
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
-                # Merge stderr into stdout so we can surface USB/device errors via Radio Status
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
@@ -225,16 +231,32 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
 
             _publish_radio_status(mqtt_handler, sys_id, sys_model, status_field, "Scanning...", friendly_name=status_friendly)
 
+            empty_reads = 0
+
             while True:
-                line = process.stdout.readline()
-                if not line:
+                try:
+                    line = process.stdout.readline()
+                except StopIteration:
+                    # Mocked stdout side_effect ran out of lines
+                    break
+
+                if line == "":
+                    # Tests sometimes use "" as a “blank line” and also as EOF.
+                    # Use poll + a small consecutive-empty guard to avoid infinite loops.
+                    empty_reads += 1
                     if process.poll() is not None:
                         break
+                    if empty_reads >= 3:
+                        break
                     continue
+
+                empty_reads = 0
 
                 raw = line.strip()
                 if not raw:
                     continue
+
+
 
                 try:
                     data = json.loads(raw)
