@@ -389,6 +389,43 @@ def test_send_sensor_value_none_and_verbose_and_no_resend(monkeypatch, capsys):
     assert after_state == before_state
 
 
+def test_battery_ok_publishes_binary_sensor_and_inverts_state(monkeypatch):
+    h, c = _make_handler(monkeypatch)
+
+    monkeypatch.setattr(
+        mqtt_handler,
+        "FIELD_META",
+        {"battery_ok": (None, "battery", "mdi:battery", "Battery Low")},
+        raising=False,
+    )
+
+    # battery_ok=1 => battery is OK, but HA battery binary sensor expects OFF=normal
+    h.send_sensor("aa:bb", "battery_ok", 1, "Dev", "NotBridge", is_rtl=False)
+
+    # migration helper deletes any older numeric sensor config topic
+    assert any(
+        t.startswith("homeassistant/sensor/deadbeef_battery_ok_T/config") and p == "" and r is True
+        for (t, p, r) in c.published
+    )
+
+    # Discovery should be under binary_sensor and include device_class battery
+    topic, payload = _last_published_json(c, "homeassistant/binary_sensor/")
+    assert topic.startswith("homeassistant/binary_sensor/deadbeef_battery_ok_T/config")
+    assert payload.get("device_class") == "battery"
+    assert payload.get("payload_on") == "ON"
+    assert payload.get("payload_off") == "OFF"
+    assert "unit_of_measurement" not in payload
+    assert "state_class" not in payload
+
+    # State should be OFF when battery_ok==1
+    state_topic = "home/rtl_devices/deadbeef/battery_ok"
+    assert any(t == state_topic and p == "OFF" and r is True for (t, p, r) in c.published)
+
+    # battery_ok=0 => battery is low => ON
+    h.send_sensor("aa:bb", "battery_ok", 0, "Dev", "NotBridge", is_rtl=False)
+    assert any(t == state_topic and p == "ON" and r is True for (t, p, r) in c.published)
+
+
 def test_start_success_and_failure_and_stop(monkeypatch):
     h, c = _make_handler(monkeypatch)
 

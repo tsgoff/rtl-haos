@@ -94,4 +94,10 @@ FIELD_META = {
     "consumption":          ("ft³", "gas", "mdi:fire", "Gas Usage"),
     "meter_reading":        ("ft³", "water", "mdi:water-pump", "Water Reading"),
 
+    # --- Battery ---
+    # Many decoders emit battery_ok where 1/True means battery is OK and 0/False
+    # means battery is LOW. We publish this as a binary sensor (device_class: battery)
+    # and invert it in mqtt_handler so ON means LOW battery.
+    "battery_ok":           (None, "battery", "mdi:battery", "Battery Low"),
+
 }
