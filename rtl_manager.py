@@ -257,7 +257,7 @@ def _debug_dump_packet(
             meta_s = f"unit={unit or '-'} class={dev_class or '-'} icon={icon or '-'} name={friendly or '-'}"
         else:
             # This is what mqtt_handler will effectively do: default_meta
-            prefix = "[!! UNSUPPORTED !!]"
+            prefix = "[UNSUPPORTED]"
             missing.add(field)
             friendly = _default_friendly(field)
             meta_s = f"FALLBACK unit=- class=none icon={default_icon} name={friendly}"
