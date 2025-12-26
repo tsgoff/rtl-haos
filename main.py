@@ -106,6 +106,7 @@ def timestamped_print(*args, **kwargs):
             s_color = get_source_color(src_text)
             msg = f"{c_white}[{c_reset}{s_color}{src_text}{c_reset}{c_white}]:{c_reset} {rest_of_msg}"
 
+        msg = highlight_support_tags(msg)
     _original_print(f"{time_prefix} {header} {msg}", flush=True, **kwargs)
 
 builtins.print = timestamped_print
