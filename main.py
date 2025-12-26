@@ -50,6 +50,24 @@ def highlight_json(text):
     text = re.sub(r':\s*(true|false|null)', f': {c_white}\\1{c_reset}', text)
     return text
 
+def highlight_support_tags(text: str) -> str:
+    # Normalize common variants (so old logs still color nicely)
+    text = re.sub(r"\[\s*!!\s*UNSUPPORTED\s*!!\s*\]", "[UNSUPPORTED]", text)
+    text = re.sub(r"\[\s*SUPPORTED\s*\]", "[SUPPORTED]", text)
+
+    # Colorize tags anywhere in the line
+    text = re.sub(
+        r"\[UNSUPPORTED\]",
+        f"{c_white}[{c_reset}{c_yellow}UNSUPPORTED{c_reset}{c_white}]{c_reset}",
+        text,
+    )
+    text = re.sub(
+        r"\[SUPPORTED\]",
+        f"{c_white}[{c_reset}{c_green}SUPPORTED{c_reset}{c_white}]{c_reset}",
+        text,
+    )
+    return text
+
 def timestamped_print(*args, **kwargs):
     now = datetime.now().strftime("%H:%M:%S")
     time_prefix = f"{c_dim}[{now}]{c_reset}"
