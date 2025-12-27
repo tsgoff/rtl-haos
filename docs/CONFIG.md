@@ -109,17 +109,6 @@ MQTT_PASS=password
 
 **Multi-Radio Setup:**
 
-If you leave `RTL_CONFIG` unset/empty, RTL-HAOS will run in **Auto Multi-Radio** mode (start 1–3 radios depending on detected dongles).
-
-You can control the auto secondary band with:
-
-```bash
-RTL_AUTO_BAND_PLAN=auto   # auto|us|eu|world
-# Optional override used by plan=auto
-HA_COUNTRY=US
-```
-
-
 > **Note**: If you only have **one** RTL-SDR, no other radio configuration is needed.
 > The bridge will automatically try to read the dongle's serial with `rtl_eeprom` and use that.
 > If it cannot detect a serial, it falls back to device index `id = "0"`.
@@ -128,7 +117,7 @@ For multiple RTL-SDR dongles on different frequencies:
 
 ```bash
 # Multiple radios 
-RTL_CONFIG='[{"name": "Weather Radio", "id": "101", "freq": "433.92M", "rate": "250k"}, {"name": "Utility Meter", "id": "102", "freq": "915M", "rate": "1024k"}]'
+RTL_CONFIG='[{"name": "Weather Radio", "id": "101", "freq": "433.92M", "rate": "250k"}, {"name": "Utility Meter", "id": "102", "freq": "915M", "rate": "250k"}]'
 ```
 
 **Device Filtering:**

@@ -1,15 +1,5 @@
 # Changelog
 
-## v1.1.12
-
-### New: Auto Multi-Radio (plug-and-go)
-- **NEW:** When `rtl_config` is empty, RTL-HAOS auto-starts **1–3** radios based on detected RTL-SDR dongles (with safe defaults).
-- **NEW:** Region-aware secondary band via **Region / Band Plan** dropdown: `auto|us|eu|world`.
-- **NEW:** Optional 3rd radio becomes a regional hopper for “interesting” bands and avoids intentional overlap with the first two radios.
-
-### Add-on UX
-- **CHG:** Zero-clutter add-on UI in auto mode: only the region dropdown is exposed; define `rtl_config` to switch to manual mode and control everything per-radio.
-
 ## v1.1.11
 
 ### Fixes

@@ -110,8 +110,8 @@ class Settings(BaseSettings):
     # outside the primary/secondary bands.
     #
     # - If rtl_auto_hopper_freqs is empty, the hopper plan is derived from HA country:
-    #     * EU/UK/EEA/CH: 169.4M, 868.95M, 869.525M, 915M
-    #     * Else (US/CA/AU/NZ/etc): 315M, 345M, 390M, 868M
+    #     * EU/UK/EEA/CH: 915M,315M,345M
+    #     * Else (US/CA/AU/NZ/etc): 315M,345M,868M
     # - If rtl_auto_hopper_freqs is set, it is used verbatim (comma-separated).
     rtl_auto_hopper_freqs: str = Field(default="")
     rtl_auto_hopper_hop_interval: int = Field(default=20)
