@@ -460,7 +460,7 @@ If `rtl_433` reports a `battery_ok` field for a device, RTL-HAOS publishes a Hom
 
 If you plan to run multiple RTL-SDR dongles (e.g. 433 MHz + 915 MHz), you **must** give each dongle a unique serial number and then configure `rtl_config` to pin each radio to its frequency.
 
-See **`docs/MULTI_RADIO.md`** for the full, step-by-step EEPROM/serial guide and `status_id` tips.
+See [docs/MULTI_RADIO.md](docs/MULTI_RADIO.md) for the full, step-by-step EEPROM/serial guide and `status_id` tips.
 
 ---
 
