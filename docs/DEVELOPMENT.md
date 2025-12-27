@@ -2,6 +2,27 @@
 
 How to run tests and work on RTL-HAOS locally.
 
+## Local dev environment
+
+To set up the project’s isolated pytest virtualenv without running tests (handy for editors/linters and iterative work):
+
+```bash
+./scripts/pytest_venv.sh --no-run
+source .venv-pytest/bin/activate
+```
+
+After activating, you can run tests normally:
+
+```bash
+pytest
+```
+
+To leave the venv:
+
+```bash
+deactivate
+```
+
 ## Testing
 
 ### Unit tests (default)
@@ -68,3 +89,93 @@ The fixture-recording script supports unit suffixes and a dry-run mode:
 ```
 
 If you forget a suffix (e.g. `433.92` instead of `433.92M`, or `250` instead of `250k`), the script will fail fast with a helpful hint.
+
+---
+
+## Deploy to Home Assistant OS (HAOS)
+
+RTL-HAOS can be developed as a **local Home Assistant add-on**. Use the single helper script:
+
+- **`scripts/haos.sh`** — deploy / uninstall / logs / status
+
+It reads the add-on slug from `config.yaml` and deploys to:
+
+- `/addons/local/<slug>` (HAOS local add-ons)
+
+### Prereqs
+
+- A Home Assistant OS machine reachable on your network.
+- SSH access into HAOS (commonly via the **Terminal & SSH** add-on).
+- Password auth can work, but SSH keys are recommended.
+
+Make it executable once:
+
+```bash
+chmod +x scripts/haos.sh
+```
+
+### Deploy
+
+Sync repo contents to HAOS:
+
+```bash
+./scripts/haos.sh deploy --host homeassistant.local
+```
+
+Deploy, rebuild, restart, then print logs:
+
+```bash
+./scripts/haos.sh deploy --host 192.168.1.109 --rebuild --restart --logs
+```
+
+If you see an error like “Addon … does not exist in the store”, run once in the HA UI:
+
+**Settings → Add-ons → Add-on store → (⋮) Check for updates**
+
+Then install it under **Local add-ons**. After that, CLI rebuild/restart works reliably.
+
+### Logs
+
+```bash
+./scripts/haos.sh logs --host 192.168.1.109
+./scripts/haos.sh logs --host 192.168.1.109 --follow
+```
+
+### Status / Debug
+
+```bash
+./scripts/haos.sh status --host 192.168.1.109
+```
+
+### Uninstall
+
+Uninstall (if installed) and remove remote add-on folder(s) under `/addons`:
+
+```bash
+./scripts/haos.sh uninstall --host 192.168.1.109
+```
+
+Also remove the add-on’s optional `/share/<slug>` directory:
+
+```bash
+./scripts/haos.sh uninstall --host 192.168.1.109 --rm-share --yes
+```
+
+### Optional: sync a local data folder to /share
+
+Mirror a local folder into HAOS `/share/<slug>`:
+
+```bash
+./scripts/haos.sh deploy --host 192.168.1.109 --share ./tx_files
+```
+
+### Configuration via environment variables
+
+```bash
+export HA_HOST=192.168.1.109
+export HA_USER=root
+export HA_PORT=22
+# export HA_KEY=~/.ssh/haos_ed25519   # recommended
+./scripts/haos.sh deploy --rebuild --restart --logs
+```
+
