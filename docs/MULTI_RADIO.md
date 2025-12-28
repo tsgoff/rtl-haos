@@ -62,7 +62,7 @@ RTL-HAOS publishes a host-level **Radio Status** entity per radio (e.g. `radio_s
 
 ## 🔧 Advanced: Multi-Radio Setup (Critical)
 
-If you plan to use multiple RTL-SDR dongles (e.g., one for 433MHz and one for 915MHz), you **must** assign them unique serial numbers. By default, most dongles share the serial `00000001`, which causes conflicts where the system swaps "Radio A" and "Radio B" after a reboot.
+If you plan to use multiple RTL-SDR dongles with differant style antennas (e.g., one for 433MHz and one for 915MHz), you **should** assign them unique serial numbers. By default, most dongles share the serial `00000001`, which causes conflicts where the system swaps "Radio A" and "Radio B" after a reboot.
 
 ### ⚠️ Step 1: Safety First (Backup EEPROM)
 
