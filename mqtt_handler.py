@@ -547,7 +547,7 @@ class HomeNodeMQTT:
         # Normalize raw meter readings: some models report hundredths.
         # Example: 2735618 => 27356.18 (divide by 100)
         if field in {"Consumption", "consumption", "consumption_data"}:
-            scale = {"ERT-SCM": 0.01, "SCMplus": 0.01}.get(str(device_model).strip())
+            scale = {"ERT-SCM": 0.01, "SCMplus": 0.01, "SCM": 0.01}.get(str(device_model).strip())
             if scale:
                 try:
                     out_value = round(float(out_value) * scale, 2)
