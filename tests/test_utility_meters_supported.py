@@ -78,7 +78,7 @@ def test_neptune_r900_meter_reading_uses_gallons(monkeypatch):
     # 1) Reading arrives first (no commodity hint yet)
     h.send_sensor("device_x", "meter_reading", 100.0, "Neptune deadbeef", "Neptune-R900")
     cfg1 = _last_config_payload(c, "deadbeef_meter_reading_T")
-    assert cfg1.get("unit_of_measurement") == "ft³"  # fallback before commodity is known
+    assert cfg1.get("unit_of_measurement") == "gal"  # model-aware meta (Neptune-R900) should be gallons immediately
 
     # 2) Type arrives later; triggers refresh with gallons
     h.send_sensor("device_x", "type", "water", "Neptune deadbeef", "Neptune-R900")

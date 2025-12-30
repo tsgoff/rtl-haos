@@ -55,7 +55,7 @@ except ModuleNotFoundError:  # pragma: no cover
 # Local imports
 import config
 from utils import clean_mac, get_system_mac
-from field_meta import FIELD_META
+from field_meta import FIELD_META, get_field_meta
 from rtl_manager import trigger_radio_restart
 
 # --- Utility meter commodity inference (Itron ERT / rtlamr conventions) ---
@@ -430,7 +430,7 @@ class HomeNodeMQTT:
                 base_meta = FIELD_META.get("radio_status", default_meta)
                 unit, device_class, icon, default_fname = base_meta
             else:
-                meta = FIELD_META.get(sensor_name, default_meta)
+                meta = get_field_meta(sensor_name, device_model, base_meta=FIELD_META) or default_meta
                 if meta_override is not None:
                     meta = meta_override
                 try:
