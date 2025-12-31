@@ -37,7 +37,7 @@ def test_safe_status_suffix_and_priority():
 def test_discover_rtl_devices_parses_serial_and_fallback_index(monkeypatch, capsys):
     import rtl_manager as rm
 
-    def fake_run(cmd, capture_output, text, timeout):
+    def fake_run(cmd, capture_output=None, text=None, timeout=None, **kwargs):
         # cmd looks like: ["rtl_eeprom", "-d", "<index>"]
         idx = int(cmd[-1])
         if idx == 0:

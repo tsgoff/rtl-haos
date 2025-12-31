@@ -295,6 +295,10 @@ def discover_rtl_devices():
                 ["rtl_eeprom", "-d", str(index)],
                 capture_output=True,
                 text=True,
+                # rtl_eeprom output can include non-UTF8 bytes depending on dongle EEPROM
+                # contents. Without this, Python may raise UnicodeDecodeError while decoding
+                # stdout/stderr (e.g., byte 0xFF).
+                errors="replace",
                 timeout=5,
             )
         except FileNotFoundError:
@@ -392,6 +396,9 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                # rtl_433 output should be UTF-8, but harden against occasional non-UTF8 bytes
+                # so the loop can't crash due to decoding errors.
+                errors="replace",
                 bufsize=1,
             )
             ACTIVE_PROCESSES.append(process)
