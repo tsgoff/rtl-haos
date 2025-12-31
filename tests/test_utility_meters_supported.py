@@ -63,12 +63,18 @@ def test_ert_scm_electric_inference_updates_discovery(monkeypatch):
     h = mqtt_handler.HomeNodeMQTT(version="vtest")
     c = h.client
 
-    # 1) consumption_data arrives first (ERT-SCM reports hundredths)
+    # 1) consumption_data arrives first
+    # UPDATE: We no longer auto-scale by 0.01. We report the RAW value (2735618).
     h.send_sensor("device_x", "consumption_data", 2735618, "ERT deadbeef", "ERT-SCM")
+    
     cfg1 = last_discovery_payload(c, domain="sensor", unique_id_with_suffix="deadbeef_consumption_data_T")
     assert cfg1.get("unit_of_measurement") == "ft³"  # default before ert_type
+    
     st1 = last_state_payload(c, "deadbeef", "consumption_data")
-    assert_float_str(st1, 27356.18)
+    
+    # OLD: assert_float_str(st1, 27356.18)
+    # NEW: Expect raw value
+    assert_float_str(st1, 2735618.0)
 
     # 2) ert_type arrives (7 = electric per rtlamr conventions)
     h.send_sensor("device_x", "ert_type", 7, "ERT deadbeef", "ERT-SCM")
