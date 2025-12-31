@@ -3,7 +3,7 @@
 FILE: mqtt_handler.py
 DESCRIPTION:
   Manages the connection to the MQTT Broker.
-  - UPDATED: Now respects VERBOSE_TRANSMISSIONS setting.
+  - UPDATED: Removed legacy gas normalization. Now reports RAW meter values (ft3).
 """
 import json
 import threading
@@ -198,7 +198,8 @@ class HomeNodeMQTT:
         if commodity == "electric":
             return ("kWh", "energy", "mdi:flash", "Energy Reading")
         if commodity == "gas":
-            # Display units are configurable. Default is ft³.
+            # Default is ft3 (Raw). If user requested CCF via config, we label it CCF.
+            # (Though in the "Clean" path, we encourage them to stick to ft3).
             if str(getattr(config, "GAS_VOLUME_UNIT", "ft3")).strip().lower() == "ccf":
                 return ("CCF", "gas", "mdi:fire", "Gas Usage")
             return ("ft³", "gas", "mdi:fire", "Gas Usage")
@@ -221,7 +222,8 @@ class HomeNodeMQTT:
         if commodity != "gas":
             return value
 
-        # Gas: ft³ (default) or CCF (hundred cubic feet)
+        # If user explicitly set GAS_VOLUME_UNIT="ccf", we do the conversion here.
+        # Otherwise (default "ft3"), we pass the raw value through.
         if str(getattr(config, "GAS_VOLUME_UNIT", "ft3")).strip().lower() == "ccf":
             try:
                 return round(float(value) / 100.0, 4)
@@ -556,25 +558,11 @@ class HomeNodeMQTT:
         if field in {"Consumption", "consumption", "consumption_data", "meter_reading"}:
             self._utility_last_raw[(clean_id, field)] = value
 
-        # Normalize raw meter readings for certain models/fields.
-        #
-        # IMPORTANT:
-        # - ERT-SCM 'consumption_data' is commonly reported in hundredths (e.g., 2735618 => 27356.18).
-        # - SCMplus/SCM gas 'Consumption' is treated as *raw cubic feet* (no ÷100 here).
-        #   Display-unit conversions (ft³ <-> CCF) happen later in _apply_utility_value_conversion().
-        if field in {"consumption_data"}:
-            scale = {"ERT-SCM": 0.01}.get(str(device_model).strip())
-            if scale:
-                try:
-                    out_value = round(float(out_value) * scale, 2)
-                except (TypeError, ValueError):
-                    pass
+        # --- CLEAN: Removed legacy normalization logic ---
+        # We now send the RAW meter count (ft3) to Home Assistant.
+        # This fixes the data integrity issue moving forward, even though it causes
+        # a one-time jump in historical graphs for users who were on v1.1.13.
 
-
-
-
-        # Cache utility commodity hints.
-        # ERT-SCM often uses a numeric ERT type, while SCMplus/IDM often provide MeterType.
         prev_commodity = self._commodity_by_device.get(clean_id)
 
         commodity_update = None

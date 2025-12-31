@@ -1,8 +1,13 @@
 # Changelog
+
 ## v1.1.14
-- **NEW:** Added `gas_volume_unit` configuration to support **CCF (100 cubic feet)** units for utility meters. Defaults to `ft3`.
+### ⚠️ BREAKING CHANGE: Gas Meter Units
+- **Gas Meter Normalization Removed:** In previous versions, the bridge attempted to auto-scale gas meter readings (dividing by 100) to match the visual "CCF" dials on many physical meters, despite the radio protocol reporting in Cubic Feet.
+    - **What Changed:** We now report the **Raw Cubic Feet (ft³)** value exactly as received from the radio.
+    - **The Impact:** If you have an `ERT-SCM` or `SCMplus` meter, your reading will likely **jump by 100x** (e.g., `2,223` → `222,300`). This is normal and represents the correct raw value.
+    - **How to Fix:** If you want to see **CCF** (Hundred Cubic Feet) in your dashboard, do not rely on the bridge to do the math. Instead, open the Entity Settings in Home Assistant and change the **Unit of Measurement** to `CCF` (or `hundred ft³`). Home Assistant will then perform the conversion natively.
+
 - **FIX:** Auto-rename duplicate RTL-SDR USB serial numbers (e.g., `00000001` -> `00000001-1`) to prevent hardware map collisions and missing radios.
-- **FIX:** Improved throttling logs to display the frequency of the radio receiving the data.
 
 ## v1.1.13
 - **FIX:** Home Assistant discovery for **ERT-SCM electric meters** so they no longer appear as gas meters; they now publish as **Energy (kWh)**.

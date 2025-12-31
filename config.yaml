@@ -1,6 +1,6 @@
 name: "RTL-HAOS"
 description: "RTL-SDR to Home Assistant MQTT bridge with signal diagnostics and system monitoring"
-version: "1.1.13x10"
+version: "1.1.13x11"
 slug: rtl-haos
 url: "https://github.com/jaronmcd/rtl-haos"
 arch:
@@ -74,7 +74,7 @@ schema:
   verbose_transmissions: bool
 
   # Utility meter display units
-  gas_volume_unit: list(ft3|ccf)
+  #gas_volume_unit: list(ft3|ccf)
 
   # Auto multi-radio (when rtl_config is empty)
   rtl_auto_band_plan: list(auto|us|eu|world)
