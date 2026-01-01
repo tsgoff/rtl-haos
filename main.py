@@ -179,16 +179,32 @@ def main():
     print("[STARTUP] Scanning USB bus for RTL-SDR devices...")
     detected_devices = discover_rtl_devices()
     
-    # If multiple dongles share the same serial (e.g., '00000001'), we append the index
+    # If multiple dongles share the same USB serial (e.g., '00000001'), append index
     # (e.g., '00000001-1') so they don't overwrite each other in the hardware map.
-    _seen_ids = {}
+    _seen_usb = {}
     for d in detected_devices:
-        original_id = d.get('id')
-        if original_id in _seen_ids:
-            new_id = f"{original_id}-{d['index']}"
-            d['id'] = new_id
-            print(f"[STARTUP] Renamed duplicate Serial '{original_id}' to '{new_id}'")
-        _seen_ids[d.get('id')] = True
+        # Preserve the raw dongle-reported serial separately
+        d.setdefault("usb_serial", str(d.get("id", "")).strip())
+
+        usb = d["usb_serial"]
+        if usb in _seen_usb:
+            new_id = f"{usb}-{d.get('index')}"
+            d["id"] = new_id
+            print(
+                f"[STARTUP] Renamed duplicate Serial '{usb}' to '{new_id}' "
+                f"(USB Serial, index {d.get('index')})"
+            )
+        else:
+            d["id"] = usb
+
+        _seen_usb[usb] = True
+
+
+    for d in detected_devices:
+        print(
+            f"[STARTUP] SDR index {d.get('index')}: "
+            f"USB Serial {d.get('usb_serial')} (ID {d.get('id')}) Name {d.get('name')}"
+        )
 
 
     # --- Check for Physical Duplicates (Hardware) ---
@@ -341,7 +357,8 @@ def main():
                     "freq": config.RTL_DEFAULT_FREQ,
                 }
                 radio1.update(dev1)
-                radio1["name"] = f"{name1} (Auto 1)"
+                rid1 = str(radio1.get("id") or "").strip() or "unknown"
+                radio1["name"] = f"{name1} (Auto 1, ID {rid1})"
                 radios.append(radio1)
 
                 # --- Radio #2 (Secondary) ---
@@ -374,7 +391,8 @@ def main():
                         "freq": freq2,
                     }
                     radio2.update(dev2)
-                    radio2["name"] = f"{name2} (Auto 2)"
+                    rid2 = str(radio2.get("id") or "").strip() or "unknown"
+                    radio2["name"] = f"{name2} (Auto 2, ID {rid2})"
                     radios.append(radio2)
 
                     # --- Radio #3 (Tertiary) ---
@@ -469,7 +487,8 @@ def main():
                                 "freq": freq3,
                             }
                             radio3.update(dev3)
-                            radio3["name"] = f"{name3} (Auto 3)"
+                            rid3 = str(radio3.get("id") or "").strip() or "unknown"
+                            radio3["name"] = f"{name3} (Auto 3, ID {rid3})"
                             radios.append(radio3)
 
                 for r in radios:
@@ -478,9 +497,15 @@ def main():
                     for w in warns:
                         print(f"[STARTUP] DEFAULT CONFIG WARNING: [Radio: {dev_name}] {w}")
 
+                    slot = int(r.get("slot", 0) or 0)
+                    role = {0: "Primary", 1: "Secondary", 2: "Hopper"}.get(slot, "Radio")
+
                     print(
-                        f"[STARTUP] Radio #{int(r.get('slot', 0)) + 1} ({r.get('name')}) -> {r.get('freq')} (Rate: {r.get('rate')})"
+                        f"[STARTUP] Radio #{slot + 1} ({role}) ({r.get('name')}) "
+                        f"[USB Serial {r.get('usb_serial', r.get('id'))} (ID {r.get('id')}) / Index {r.get('index')}] -> ..."
+                        f"(Rate: {r.get('rate')}, Hop: {r.get('hop_interval')})"
                     )
+
 
                     threading.Thread(
                         target=rtl_loop,
