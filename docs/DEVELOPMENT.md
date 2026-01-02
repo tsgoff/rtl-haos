@@ -23,6 +23,97 @@ To leave the venv:
 deactivate
 ```
 
+
+## Run RTL-HAOS from a development host venv
+
+This runs the same Python app you ship in the add-on, but directly on your dev machine (no Supervisor, no container).
+Configuration is read from **environment variables / `.env`** (since `/data/options.json` is add-on-only).
+
+### Prereqs
+
+- **Python**: whatever your venv script selects (recommended: use `./scripts/pytest_venv.sh` below)
+- **MQTT broker** reachable from your dev host
+  - If you already use Home Assistant’s Mosquitto add-on, point `MQTT_HOST` at your HA box IP
+  - Or run a local broker (example below)
+- **rtl_433** installed and in `PATH` (or set `RTL_433_BIN` to your custom build)
+
+Quick check:
+
+```bash
+rtl_433 -V
+```
+
+### 1) Create & activate the venv
+
+Use the same venv helper you already use for tests (it installs RTL-HAOS + deps in editable mode):
+
+```bash
+./scripts/pytest_venv.sh --no-run
+source .venv-pytest/bin/activate
+```
+
+### 2) Create a `.env`
+
+Start from the example:
+
+```bash
+cp .env.example .env
+```
+
+Minimum settings to get MQTT discovery into Home Assistant:
+
+```ini
+# .env
+MQTT_HOST=192.168.1.109
+MQTT_PORT=1883
+MQTT_USER=your_user
+MQTT_PASS=your_pass
+
+BRIDGE_ID=42
+BRIDGE_NAME=rtl-haos-dev
+```
+
+Optional (use a custom rtl_433 binary / build):
+
+```ini
+RTL_433_BIN=/path/to/rtl_433
+```
+
+Optional (pass through any rtl_433 flags globally):
+
+```ini
+RTL_433_ARGS=-g 40 -p 0 -t "direct_samp=1"
+```
+
+Optional (manual multi-radio config from the host; note JSON string):
+
+```ini
+RTL_CONFIG=[{"name":"utility","id":"102","freq":"915M","rate":"1024k","protocols":"4,12"},{"name":"weather","id":"201","freq":"433.92M","rate":"250k"}]
+```
+
+### 3) Start a local MQTT broker (if you don’t already have one)
+
+```bash
+docker run --rm -p 1883:1883 eclipse-mosquitto:2
+```
+
+Then set `MQTT_HOST=127.0.0.1` in `.env`.
+
+### 4) Run RTL-HAOS
+
+From repo root:
+
+```bash
+python -u main.py
+```
+
+Stop with **Ctrl+C**.
+
+### Notes
+
+- **USB permissions**: on Linux you may need udev rules / group membership (or run as root) to access RTL-SDR dongles.
+- **No hardware**: RTL-HAOS will warn if no RTL-SDR devices are found. For most development work, unit tests are the fastest path; for end-to-end behavior, run on a host with an SDR attached.
+
 ## Testing
 
 ### Unit tests (default)

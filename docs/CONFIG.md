@@ -70,6 +70,54 @@ rtl_config:
     protocols: "104,105"
 ```
 
+
+### Advanced: full rtl_433 passthrough
+
+RTL-HAOS can pass **arbitrary rtl_433 flags** and/or a full **rtl_433 config file**. This is the most flexible way to tune reception (gain/ppm/AGC), constrain decoders, or use tuner settings.
+
+**Global passthrough (applies to all radios):**
+
+```yaml
+# Extra flags appended to every rtl_433 invocation
+rtl_433_args: '-g 40 -p 0 -t "direct_samp=1"'
+
+# Optional: provide an rtl_433 config file via -c
+# In the HA add-on, relative paths resolve under /share (e.g. /share/rtl_433.conf).
+rtl_433_config_path: "rtl_433.conf"
+
+# Or inline config content (RTL-HAOS writes it to /tmp and passes -c /tmp/...)
+rtl_433_config_inline: |
+  -g 40
+  -p 0
+  -R 104
+  -R 105
+```
+
+**Per-radio passthrough (overrides/extends the global settings):**
+
+```yaml
+rtl_config:
+  - name: utility
+    freq: 868.95M
+    rate: 250k
+
+    # Optional: override which RTL-SDR this radio uses (-d accepts index/serial/Soapy selectors)
+    device: ":00000001"
+
+    # Extra flags for this radio only
+    args: '-g 25 -t "biastee=1"'
+
+    # Optional: per-radio config file or inline config (takes precedence over global)
+    config_path: "utility.conf"
+    # config_inline: |
+    #   -g 25
+    #   -R 104
+```
+
+Notes:
+- RTL-HAOS prefers **JSON output**. If you add extra `-F` outputs, RTL-HAOS will ignore non-JSON lines, but your logs may be noisier.
+- You can still use the simpler `protocols:` field for a quick `-R` filter.
+
 ### Device filtering
 
 You can restrict which decoded devices become entities using whitelist/blacklist rules:

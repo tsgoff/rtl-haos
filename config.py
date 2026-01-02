@@ -69,6 +69,15 @@ class Settings(BaseSettings):
     # --- RTL-SDR / Radios ---
     rtl_config: list[dict] = Field(default_factory=list)
 
+
+    # --- rtl_433 passthrough (add-on + standalone) ---
+    # These let users pass arbitrary rtl_433 flags and/or a full rtl_433 config file (-c).
+    # RTL-HAOS will still parse JSON lines and ignore non-JSON output lines.
+    rtl_433_bin: str = Field(default="rtl_433")
+    rtl_433_args: str = Field(default="")
+    rtl_433_config_path: str = Field(default="")
+    rtl_433_config_inline: str = Field(default="")
+
     # Standalone-only advanced defaults (NOT exposed in HA add-on UI).
     rtl_default_freq: str = Field(default="433.92M")
     rtl_default_hop_interval: int = Field(default=60)
@@ -217,6 +226,12 @@ RTL_CONFIG = settings.rtl_config
 RTL_DEFAULT_FREQ = settings.rtl_default_freq
 RTL_DEFAULT_HOP_INTERVAL = settings.rtl_default_hop_interval
 RTL_DEFAULT_RATE = settings.rtl_default_rate
+
+# rtl_433 passthrough
+RTL_433_BIN = settings.rtl_433_bin
+RTL_433_ARGS = settings.rtl_433_args
+RTL_433_CONFIG_PATH = settings.rtl_433_config_path
+RTL_433_CONFIG_INLINE = settings.rtl_433_config_inline
 
 # Auto multi-radio
 RTL_AUTO_MULTI = settings.rtl_auto_multi

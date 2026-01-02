@@ -16,6 +16,7 @@ FIELD_META = {
 
     "sys_ip":               ("", "none", "mdi:ip-network", "IP Address"),
     "sys_os_version":       ("", "none", "mdi:linux", "Linux Kernel"),
+    "sys_rtl_433_version": ("", "none", "mdi:radio", "rtl_433 Version"),
     "sys_model":            ("", "none", "mdi:chip", "Device Model"),
     "sys_script_mem":       ("MB", "data_size", "mdi:memory", "Script RAM Usage"),
     "sys_cpu":              ("%", "none", "mdi:cpu-64-bit", "CPU Load"),

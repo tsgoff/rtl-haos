@@ -11,6 +11,7 @@ import threading
 import sys
 import importlib.util
 import socket
+import subprocess
 # --- IMPORTS & DEPENDENCY CHECK ---
 # NOTE: During unit tests, conftest may inject a dummy "psutil" into sys.modules.
 # Some mocks (e.g. MagicMock) don't provide __spec__, which can cause
@@ -52,6 +53,39 @@ def format_list_for_ha(data_list):
         return joined[:247] + "..."
     return joined
 
+
+# Cache rtl_433 version so we don't spawn a process every minute.
+_RTL_433_VERSION_CACHE = None
+
+def _get_rtl_433_version():
+    """Return a short rtl_433 version string (best-effort)."""
+    bin_path = getattr(config, "RTL_433_BIN", None) or "rtl_433"
+    try:
+        proc = subprocess.run(
+            [bin_path, "-V"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        combined = (proc.stdout or "") + "\n" + (proc.stderr or "")
+        for line in combined.splitlines():
+            line = line.strip()
+            if line:
+                return line[:250]
+        return "Unknown"
+    except FileNotFoundError:
+        return "rtl_433 not found"
+    except Exception as e:
+        return f"Unknown ({type(e).__name__})"
+
+def get_rtl_433_version_cached():
+    global _RTL_433_VERSION_CACHE
+    if _RTL_433_VERSION_CACHE is None:
+        _RTL_433_VERSION_CACHE = _get_rtl_433_version()
+    return _RTL_433_VERSION_CACHE
+
 def system_stats_loop(mqtt_handler, DEVICE_ID, MODEL_NAME):
     
     # Initialize Hardware Monitor if available
@@ -64,6 +98,9 @@ def system_stats_loop(mqtt_handler, DEVICE_ID, MODEL_NAME):
             print(f"[WARN] Hardware Monitor failed to start: {e}")
 
     print("[STARTUP] Starting System Monitor Loop...")
+
+
+    rtl_433_version = get_rtl_433_version_cached()
     
     while True:
         device_name = f"{MODEL_NAME} ({DEVICE_ID})" 
@@ -76,6 +113,7 @@ def system_stats_loop(mqtt_handler, DEVICE_ID, MODEL_NAME):
             dev_list_str = format_list_for_ha(devices) if count > 0 else "Scanning..."
 
             mqtt_handler.send_sensor(DEVICE_ID, "sys_device_count", count, device_name, MODEL_NAME, is_rtl=True)
+            mqtt_handler.send_sensor(DEVICE_ID, "sys_rtl_433_version", rtl_433_version, device_name, MODEL_NAME, is_rtl=True)
             # mqtt_handler.send_sensor(DEVICE_ID, "sys_device_list", dev_list_str, device_name, MODEL_NAME, is_rtl=True)
 
             # B. Configuration Lists (Sent as Diagnostics)

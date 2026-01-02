@@ -26,6 +26,14 @@ options:
   rtl_show_timestamps: false
   verbose_transmissions: false  # Log every single MQTT publish
 
+  # Advanced: pass through extra rtl_433 flags and/or a config file.
+  # NOTE: RTL-HAOS parses rtl_433 JSON lines. You can add additional -F outputs,
+  # but ensure JSON remains enabled (RTL-HAOS will ignore non-JSON lines).
+  rtl_433_args: ""
+  rtl_433_config_path: ""
+  rtl_433_config_inline: ""
+  rtl_433_bin: "rtl_433"
+
   # --- Battery alert behavior (battery_ok -> Battery Low) ---
   # 0 disables latching and clears low on the next OK
   battery_ok_clear_after: 300
@@ -71,6 +79,12 @@ schema:
   rtl_show_timestamps: bool
   verbose_transmissions: bool
 
+  # Advanced rtl_433 passthrough
+  rtl_433_args: str?
+  rtl_433_config_path: str?
+  rtl_433_config_inline: str?
+  rtl_433_bin: str?
+
   # Auto multi-radio (when rtl_config is empty)
   rtl_auto_band_plan: list(auto|us|eu|world)
 
@@ -93,6 +107,16 @@ schema:
       # are treated as required containers by Supervisor schema validation.
       protocols: str?
 
+      # Advanced per-radio rtl_433 passthrough
+      # - device: overrides -d (index/serial/Soapy selectors supported)
+      # - args: extra rtl_433 flags (appended after freq/rate defaults)
+      # - config_path/config_inline: provide an rtl_433 config file via -c
+      device: str?
+      args: str?
+      config_path: str?
+      config_inline: str?
+      bin: str?
+
   device_blacklist:
     - str
   device_whitelist:
@@ -101,3 +125,4 @@ services:
   - mqtt:want
 map:
   - config
+  - share
