@@ -50,4 +50,8 @@ ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 ENV TERM=xterm-256color
 
+# Optional internal build metadata (SemVer build metadata). Kept out of config.yaml.
+ARG RTL_HAOS_BUILD=""
+ENV RTL_HAOS_BUILD="${RTL_HAOS_BUILD}"
+
 CMD [ "/run.sh" ]

@@ -24,6 +24,70 @@ deactivate
 ```
 
 
+## Version strings (base vs build metadata)
+
+RTL-HAOS keeps a single, canonical **base version** in `config.yaml` under `version:`.
+
+- **Base version (what HAOS/Supervisor expects):** `VER.REV.PATCH` (SemVer-ish), e.g. `1.1.14`
+- **Display version (logs + HA device info):** `vVER.REV.PATCH+BUILD`, e.g. `v1.1.14+g3f2a9c1`
+
+Important: **do not append letters** to the base version (for example `1.1.14x`). Keep `config.yaml` strictly `X.Y.Z` and use **build metadata** instead.
+
+### Setting the build metadata
+
+RTL-HAOS reads build metadata from the environment variable `RTL_HAOS_BUILD` and appends it as SemVer build metadata (`+...`).
+
+**Local host / venv**
+
+```bash
+export RTL_HAOS_BUILD=dev
+python -u main.py
+# >>> ... (v1.1.14+dev) <<<
+```
+
+Common pattern (git short SHA):
+
+```bash
+export RTL_HAOS_BUILD="$(git rev-parse --short HEAD)"
+python -u main.py
+```
+
+You can also put it in `.env` for local development:
+
+```ini
+RTL_HAOS_BUILD=dev
+```
+
+**Docker**
+
+At runtime:
+
+```bash
+docker run -e RTL_HAOS_BUILD=dev ...
+```
+
+Or at build time (if your build system passes args):
+
+```bash
+docker build --build-arg RTL_HAOS_BUILD="$(git rev-parse --short HEAD)" -t rtl-haos:dev .
+```
+
+**HAOS add-on (local development)**
+
+Home Assistant Supervisor builds add-ons from the repo contents and does **not** reliably pass custom Docker build args for local add-ons. For local HAOS dev, the simplest options are:
+
+1) **Dev-only `run.sh` export**: temporarily add `export RTL_HAOS_BUILD=...` near the top of `run.sh`, then rebuild/restart the add-on.
+
+2) **Optional UI knob** (if you choose to add it): add a `build:` option in `config.yaml` + `schema`, and in `run.sh` export it as `RTL_HAOS_BUILD`.
+
+After changing build/base version, **rebuild + restart** the add-on so MQTT discovery/device info is republished.
+
+### Update notifications (REV-only)
+
+For update alerts, treat **REV** as the “notify threshold”: patch/build changes can be applied by users who rebuild when needed, but only **REV** bumps should generate broad update notifications.
+
+A simple rule is to derive a notify version like `VER.REV.0` (ignore PATCH/BUILD) for comparison/alerts while still showing the full display version everywhere else.
+
 ## Run RTL-HAOS from a development host venv
 
 This runs the same Python app you ship in the add-on, but directly on your dev machine (no Supervisor, no container).

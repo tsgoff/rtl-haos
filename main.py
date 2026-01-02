@@ -136,18 +136,32 @@ from data_processor import DataProcessor
 from rtl_manager import rtl_loop, discover_rtl_devices
 
 def get_version():
+    """Return display version for logs/device info.
+
+    Base version comes from config.yaml (VER.REV.PATCH).
+    Optional internal build metadata can be supplied via RTL_HAOS_BUILD and will be
+    appended as SemVer build metadata: VER.REV.PATCH+BUILD.
+    """
     try:
         cfg_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "config.yaml")
-        if os.path.exists(cfg_path):
-            with open(cfg_path, "r") as f:
-                for line in f:
-                    if line.strip().startswith("version:"):
-                        ver = line.split(':', 1)[1].strip()
-                        ver = ver.strip().strip('\"').strip("'")
-                        return f"v{ver}"
+        # Prefer centralized helper (keeps one source of truth)
+        from version_utils import get_display_version
+        return get_display_version(cfg_path, prefix="v")
     except Exception:
-        pass
+        # Fallback: legacy line-scan behavior (no build metadata)
+        try:
+            cfg_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "config.yaml")
+            if os.path.exists(cfg_path):
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip().startswith("version:"):
+                            ver = line.split(':', 1)[1].strip()
+                            ver = ver.strip().strip('"').strip("'")
+                            return f"v{ver}"
+        except Exception:
+            pass
     return "Unknown"
+
 
 def show_logo(version):
     logo_lines = [
