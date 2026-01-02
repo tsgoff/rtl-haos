@@ -168,7 +168,7 @@ This section applies to **Docker** and **Native** installation methods only.
 
 Upgrading from v1.1.14 (or earlier)?
 
-- **Displayed version may include `+<build>`** (example: `v1.1.20+046cc83`). This is *only* build metadata for logs/device info; the base add-on `version:` in `config.yaml` remains strict `X.Y.Z` for Home Assistant Supervisor comparisons.
+- **Displayed version may include `+<build>`** (example: `v1.2.0-rc.1+046cc83`). This is *only* build metadata for logs/device info; the base add-on `version:` in `config.yaml` remains strict `X.Y.Z` for Home Assistant Supervisor comparisons.
 - **New optional rtl_433 passthrough knobs** are available (global env vars and per-radio fields) if you need manual gain/AGC/ppm/tuner settings or a full `rtl_433` config file.
 - **Add-on now maps `/share`**, so you can drop `rtl_433` config files into your HAOS share and reference them from RTL-HAOS.
 

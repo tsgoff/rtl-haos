@@ -97,18 +97,32 @@ def _resolve_config_path(path_str: str) -> str:
 
 
 def _write_inline_config(inline: str, radio_name: str, radio_id: str) -> str:
-    """Write inline rtl_433 config content to a temp file and return its path."""
+    """Write inline rtl_433 config content to a temp file and return its path.
+
+    Uses a unique filename under /tmp to avoid collisions between runs (and permission
+    issues if a prior file exists with a different owner).
+    """
     content = (inline or "").rstrip()
     if not content.strip():
         return ""
 
     safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in (radio_name or "radio").lower())
-    out = Path("/tmp") / f"rtl_433_{safe}_{radio_id}.conf"
+
     try:
-        out.write_text(content + "\n", encoding="utf-8")
-        return str(out)
+        import tempfile
+        # Ensure the filename still starts with /tmp/rtl_433_ so tests and tooling can rely on it.
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            prefix=f"rtl_433_{safe}_{radio_id}_",
+            suffix=".conf",
+            dir="/tmp",
+            delete=False,
+        ) as f:
+            f.write(content + "\n")
+            return f.name
     except Exception as e:
-        print(f"[RTL] Warning: Failed writing inline rtl_433 config to {out}: {e}")
+        print(f"[RTL] Warning: Failed writing inline rtl_433 config to /tmp: {e}")
         return ""
 
 

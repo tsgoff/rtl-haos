@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.1.20
+## v1.2.0-rc.1 (Release Candidate 1)
 
 ### rtl_433 passthrough (advanced tuning & full decoder control)
 - **NEW:** Optional passthrough fields to supply arbitrary `rtl_433` flags and/or a full `rtl_433` config (`-c`):
@@ -9,8 +9,8 @@
 - **NEW:** Add-on now maps `/share` so config files can be dropped into the host share and referenced from the add-on.
 
 ### Version display: keep Supervisor comparisons stable
-- **NEW:** Display version can include SemVer build metadata (e.g. `v1.1.20+046cc83`) for logs/device info.
-  - Base add-on version in `config.yaml` remains strict `X.Y.Z` (Supervisor comparisons unchanged).
+- **NEW:** Display version can include SemVer build metadata (e.g. `v1.2.0-rc.1+046cc83`) for logs/device info.
+  - Base add-on version in `config.yaml` follows SemVer and may include a pre-release tag (e.g. `1.2.0-rc.1`). Supervisor comparisons use this value.
   - Build metadata can be provided via `RTL_HAOS_BUILD` (auto-populated in HAOS/local deploy via `build.txt`).
 
 ### Diagnostics & field metadata

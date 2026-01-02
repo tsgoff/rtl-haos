@@ -28,10 +28,10 @@ deactivate
 
 RTL-HAOS keeps a single, canonical **base version** in `config.yaml` under `version:`.
 
-- **Base version (what HAOS/Supervisor expects):** `VER.REV.PATCH` (SemVer-ish), e.g. `1.1.14`
-- **Display version (logs + HA device info):** `vVER.REV.PATCH+BUILD`, e.g. `v1.1.14+g3f2a9c1`
+- **Base version (what HAOS/Supervisor expects):** `VER.REV.PATCH` (SemVer-ish), e.g. `1.2.0-rc.1`
+- **Display version (logs + HA device info):** `vVER.REV.PATCH+BUILD`, e.g. `v1.2.0-rc.1+g3f2a9c1`
 
-Important: **do not append letters** to the base version (for example `1.1.14x`). Keep `config.yaml` strictly `X.Y.Z` and use **build metadata** instead.
+Important: **do not append letters** to the base version (for example `1.2.0-rc.1x`). Keep `config.yaml` strictly `X.Y.Z` and use **build metadata** instead.
 
 ### Setting the build metadata
 
@@ -42,7 +42,7 @@ RTL-HAOS reads build metadata from the environment variable `RTL_HAOS_BUILD` and
 ```bash
 export RTL_HAOS_BUILD=dev
 python -u main.py
-# >>> ... (v1.1.14+dev) <<<
+# >>> ... (v1.2.0-rc.1+dev) <<<
 ```
 
 Common pattern (git short SHA):
@@ -274,7 +274,7 @@ chmod +x scripts/haos.sh
 
 #### Build metadata (auto)
 
-When you deploy to HAOS using `./scripts/haos.sh deploy`, the script generates an untracked `build.txt` containing the current git short SHA (and `-dirty` if you have local changes). `run.sh` loads this into `RTL_HAOS_BUILD`, so the add-on will display versions like `v1.1.14+046cc83` automatically after each deploy/rebuild.
+When you deploy to HAOS using `./scripts/haos.sh deploy`, the script generates an untracked `build.txt` containing the current git short SHA (and `-dirty` if you have local changes). `run.sh` loads this into `RTL_HAOS_BUILD`, so the add-on will display versions like `v1.2.0-rc.1+046cc83` automatically after each deploy/rebuild.
 
 
 Sync repo contents to HAOS:
