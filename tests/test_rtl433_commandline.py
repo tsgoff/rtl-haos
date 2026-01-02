@@ -126,3 +126,124 @@ def test_rtl_loop_single_freq_does_not_require_hop(monkeypatch):
     assert cmd is not None
     cmd_str = " ".join(map(str, cmd))
     assert "915M" in cmd_str
+
+
+def test_build_cmd_includes_global_and_per_radio_passthrough(monkeypatch):
+    """Passthrough: global RTL_433_ARGS + per-radio args both appear in command."""
+    _skip_if_disabled()
+
+    import config
+    import rtl_manager
+
+    monkeypatch.setattr(config, "RTL_433_ARGS", '-p 0 -t "direct_samp=1"', raising=False)
+
+    radio = {
+        "index": 0,
+        "freq": "433.92M",
+        "rate": "250k",
+        "hop_interval": 0,
+        "name": "TestRadioPT",
+        "id": "201",
+        "slot": 0,
+        "args": "-g 0 -T 2",
+    }
+
+    cmd = rtl_manager.build_rtl_433_command(radio)
+    cmd_str = " ".join(map(str, cmd))
+
+    # Global passthrough args
+    assert "-p" in cmd and "0" in cmd, f"Expected global -p 0 in cmd: {cmd}"
+    assert "-t" in cmd and "direct_samp=1" in cmd, f"Expected global -t direct_samp=1 in cmd: {cmd}"
+
+    # Per-radio passthrough args
+    assert "-g" in cmd and "0" in cmd, f"Expected per-radio -g 0 in cmd: {cmd}"
+    assert "-T" in cmd and "2" in cmd, f"Expected per-radio -T 2 in cmd: {cmd}"
+
+    # RTL-HAOS forces JSON output for parsing
+    assert cmd_str.endswith("-F json -M level"), f"Expected forced JSON output at end, got: {cmd_str}"
+
+
+def test_build_cmd_accepts_json_list_global_args(monkeypatch):
+    """Passthrough: global args may be provided as a JSON list string."""
+    _skip_if_disabled()
+
+    import config
+    import rtl_manager
+
+    monkeypatch.setattr(config, "RTL_433_ARGS", '["-p", "1", "-g", "0"]', raising=False)
+
+    radio = {
+        "index": 1,
+        "freq": "433.92M",
+        "rate": "250k",
+        "hop_interval": 0,
+        "name": "TestRadioJSON",
+        "id": "202",
+        "slot": 1,
+    }
+
+    cmd = rtl_manager.build_rtl_433_command(radio)
+    assert "-p" in cmd and "1" in cmd
+    assert "-g" in cmd and "0" in cmd
+
+
+def test_build_cmd_config_path_resolves_relative(monkeypatch, tmp_path):
+    """Passthrough: RTL_433_CONFIG_PATH should resolve relative paths (cwd)."""
+    _skip_if_disabled()
+
+    import config
+    import rtl_manager
+
+    monkeypatch.chdir(tmp_path)
+    cfg = tmp_path / "rtl_433.conf"
+    cfg.write_text("# test\n-g 0\n", encoding="utf-8")
+
+    monkeypatch.setattr(config, "RTL_433_CONFIG_PATH", "rtl_433.conf", raising=False)
+    monkeypatch.setattr(config, "RTL_433_CONFIG_INLINE", "", raising=False)
+
+    radio = {
+        "index": 2,
+        "freq": "433.92M",
+        "rate": "250k",
+        "hop_interval": 0,
+        "name": "TestRadioCfgPath",
+        "id": "203",
+        "slot": 2,
+    }
+
+    cmd = rtl_manager.build_rtl_433_command(radio)
+    assert "-c" in cmd, f"Expected -c <path> in cmd: {cmd}"
+    c_idx = cmd.index("-c")
+    assert cmd[c_idx + 1] == str(cfg), f"Expected resolved config path {cfg}, got {cmd[c_idx + 1]}"
+
+
+def test_build_cmd_inline_config_writes_temp_file(monkeypatch):
+    """Passthrough: inline config should be written and referenced via -c."""
+    _skip_if_disabled()
+
+    import config
+    import rtl_manager
+
+    monkeypatch.setattr(config, "RTL_433_CONFIG_PATH", "", raising=False)
+    monkeypatch.setattr(config, "RTL_433_CONFIG_INLINE", "-g 0\n-R 11\n", raising=False)
+
+    radio = {
+        "index": 3,
+        "freq": "433.92M",
+        "rate": "250k",
+        "hop_interval": 0,
+        "name": "TestRadioInline",
+        "id": "204",
+        "slot": 3,
+    }
+
+    cmd = rtl_manager.build_rtl_433_command(radio)
+    assert "-c" in cmd, f"Expected -c <path> in cmd: {cmd}"
+    c_idx = cmd.index("-c")
+    cfg_path = cmd[c_idx + 1]
+    assert cfg_path.startswith("/tmp/rtl_433_"), f"Expected temp config under /tmp, got {cfg_path}"
+
+    # File should exist and contain our content.
+    with open(cfg_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    assert "-g 0" in content and "-R 11" in content
