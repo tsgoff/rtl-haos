@@ -371,6 +371,27 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
     cmd.extend(["-s", str(rate)])
 
     protocols = radio_config.get("protocols", [])
+
+    # Home Assistant add-on UI can't make a nested list truly optional inside a
+    # list-of-dicts schema. To keep this option optional, our schema models it as
+    # an optional string like "104,105". Accept both formats here:
+    #   - [104, 105]
+    #   - "104,105" (or "104 105")
+    if isinstance(protocols, str):
+        raw = protocols.strip()
+        parsed: list[int] = []
+        if raw:
+            import re
+
+            for tok in re.split(r"[\s,]+", raw):
+                if not tok:
+                    continue
+                try:
+                    parsed.append(int(tok))
+                except ValueError:
+                    print(f"[RTL] Warning: Ignoring invalid protocol value: {tok!r}")
+        protocols = parsed
+
     if protocols:
         for p in protocols:
             cmd.extend(["-R", str(p)])

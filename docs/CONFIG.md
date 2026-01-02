@@ -58,6 +58,18 @@ rtl_auto_gain: 0
 
 If you want full control (multiple radios, fixed protocols, hopping, etc.), set `rtl_config` explicitly. The full shape and defaults are defined in `config.yaml`.
 
+Example (manual radio with protocol filter):
+
+```yaml
+rtl_config:
+  - name: equascan
+    freq: 868.95M
+    rate: 250k
+    # Optional: limit rtl_433 decoders via -R
+    # Comma- or space-separated ints, e.g. "104,105".
+    protocols: "104,105"
+```
+
 ### Device filtering
 
 You can restrict which decoded devices become entities using whitelist/blacklist rules:

@@ -197,3 +197,36 @@ def test_command_line_integrity(mocker):
     # Check Protocols
     assert "-R" in cmd_list and "1" in cmd_list
     assert "2" in cmd_list
+
+
+def test_protocols_csv_parsing(mocker):
+    """Protocols may come from the add-on UI as a comma-separated string."""
+    mock_popen = mocker.patch("subprocess.Popen")
+
+    mock_proc = mocker.Mock()
+    mock_proc.stdout.readline.return_value = ""  # EOF immediately
+    mock_proc.poll.return_value = 1
+    mock_popen.return_value = mock_proc
+
+    mocker.patch("rtl_manager.time.sleep", side_effect=InterruptedError("Stop"))
+
+    radio_conf = {
+        "name": "TestRadio",
+        "id": "999",
+        "freq": "915M",
+        "rate": "250k",
+        "protocols": "1, 2  ,3"
+    }
+
+    try:
+        rtl_loop(radio_conf, None, None, "sys_id", "sys_model")
+    except InterruptedError:
+        pass
+
+    args, _ = mock_popen.call_args
+    cmd_list = args[0]
+
+    assert "-R" in cmd_list
+    assert "1" in cmd_list
+    assert "2" in cmd_list
+    assert "3" in cmd_list

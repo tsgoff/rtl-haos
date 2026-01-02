@@ -1,6 +1,6 @@
 name: "RTL-HAOS"
 description: "RTL-SDR to Home Assistant MQTT bridge with signal diagnostics and system monitoring"
-version: "1.1.14"
+version: "1.1.14x"
 slug: rtl-haos
 url: "https://github.com/jaronmcd/rtl-haos"
 arch:
@@ -85,6 +85,13 @@ schema:
       id: str?
       rate: str?
       hop_interval: int?
+
+      # Optional per-radio protocol filter (rtl_433 -R).
+      # Provide a comma-separated list, e.g. "104,105".
+      # NOTE: We intentionally model this as a string to keep it truly optional
+      # in the Home Assistant Supervisor UI. Nested lists inside list-of-dicts
+      # are treated as required containers by Supervisor schema validation.
+      protocols: str?
 
   device_blacklist:
     - str

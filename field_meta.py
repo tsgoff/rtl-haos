@@ -103,6 +103,10 @@ FIELD_META = {
     "volume_gal":           ("gal", "water", "mdi:water-pump", "Water Usage"),
     "volume_ft3":           ("ft³", "water", "mdi:water-pump", "Water Usage"),
     "volume_m3":            ("m³", "water", "mdi:water-pump", "Water Usage"),
+    "total_m3":             ("m³", "water", "mdi:water-pump", "Water Total"),
+    "total_l":              ("L",  "water", "mdi:water-pump", "Water Total"),
+    "consumption_at_set_date_m3": ("m³", "water", "mdi:water-pump", "Water @ Set Date"),
+
 
     # --- Battery ---
     # Many decoders emit battery_ok where 1/True means battery is OK and 0/False
