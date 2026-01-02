@@ -76,9 +76,6 @@ docker build --build-arg RTL_HAOS_BUILD="$(git rev-parse --short HEAD)" -t rtl-h
 
 Home Assistant Supervisor builds add-ons from the repo contents and does **not** reliably pass custom Docker build args for local add-ons. For local HAOS dev, the simplest options are:
 
-0) **If HAOS is building from a Git repository** (add-on repository / git checkout): this repo’s `Dockerfile` will try to derive the short commit SHA during the image build and bake it into `/app/build.txt`. `run.sh` then exports it as `RTL_HAOS_BUILD`, so the add-on will display versions like `v1.1.16+046cc83` automatically after rebuilds.
-   - This requires the build context to include `.git` (we intentionally do **not** ignore `.git` in `.dockerignore`). The final runtime image does **not** contain `.git` (it’s removed in a builder stage).
-
 1) **Dev-only `run.sh` export**: temporarily add `export RTL_HAOS_BUILD=...` near the top of `run.sh`, then rebuild/restart the add-on.
 
 2) **Optional UI knob** (if you choose to add it): add a `build:` option in `config.yaml` + `schema`, and in `run.sh` export it as `RTL_HAOS_BUILD`.

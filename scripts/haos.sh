@@ -198,13 +198,12 @@ fi
   fi
 
   info "[2/4] Syncing Add-on Code..."
-  # Always include build.txt even if it is gitignored (it's generated for local HAOS dev runs)
-  local rsync_filters=( --include='build.txt' )
-  [[ -f "${root}/.gitignore" ]] && rsync_filters+=( --exclude-from="${root}/.gitignore" )
+  local rsync_exclude_gitignore=()
+  [[ -f "${root}/.gitignore" ]] && rsync_exclude_gitignore+=( --exclude-from="${root}/.gitignore" )
 
   run_rsync -avz --delete \
     -e "ssh ${SSH_OPTS[*]}" \
-    "${rsync_filters[@]}" \
+    "${rsync_exclude_gitignore[@]}" \
     --exclude='.git' \
     --exclude='.github' \
     --exclude='.venv' \
