@@ -62,6 +62,37 @@ def test_rtl_loop_builds_cmd_includes_device_freq_rate(monkeypatch):
     assert _find_flag_value(cmd, "-s") == "250k"
 
 
+def test_rtl_loop_logs_command_line_per_radio(monkeypatch, capsys):
+    """Startup logs should include the exact rtl_433 command line per radio."""
+    import rtl_manager
+
+    def fake_popen(cmd, *args, **kwargs):
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(rtl_manager.subprocess, "Popen", fake_popen)
+
+    radio = {
+        "index": 0,
+        "freq": "433.92M",
+        "rate": "250k",
+        "hop_interval": 0,
+        "name": "RadioA",
+        "id": "101",
+    }
+
+    with pytest.raises(KeyboardInterrupt):
+        rtl_manager.rtl_loop(radio, mqtt_handler=None, data_processor=None, sys_id="sys", sys_model="rtl-haos")
+
+    out = capsys.readouterr().out
+    assert "rtl_433 cmd [radioa id=101]" in out.lower()
+    # Copy/paste friendly flags should be present.
+    assert "-d 0" in out
+    assert "-f 433.92m" in out.lower()
+    assert "-s 250k" in out.lower()
+    assert "-f json" in out.lower()
+    assert "-m level" in out.lower()
+
+
 def test_rtl_loop_multi_freq_adds_hop_interval_when_needed(monkeypatch):
     import rtl_manager
 

@@ -23,6 +23,19 @@ from utils import clean_mac, calculate_dew_point
 ACTIVE_PROCESSES = []
 
 
+def _format_cmd(cmd: list[str]) -> str:
+    """Format a command list into a copy/paste-friendly shell line."""
+    parts = [str(p) for p in (cmd or [])]
+    if not parts:
+        return ""
+    try:
+        # Python 3.8+
+        return shlex.join(parts)
+    except Exception:
+        # Very defensive fallback
+        return " ".join(shlex.quote(p) for p in parts)
+
+
 def _split_csv(s: str) -> list[str]:
     return [p.strip() for p in str(s or "").split(",") if p and str(p).strip()]
 
@@ -549,6 +562,8 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
     freq_display = ",".join(frequencies) if frequencies else "default"
 
     print(f"[RTL] Starting {radio_name} on {freq_display} (Rate: {rate})...")
+    # Show the exact command line we will run (copy/paste friendly)
+    print(f"[STARTUP] rtl_433 cmd [{radio_name} id={radio_id}]: {_format_cmd(cmd)}")
 
     # Ensure the entity exists even if no packets arrive.
     _publish_radio_status(mqtt_handler, sys_id, sys_model, status_field, "Scanning...", friendly_name=status_friendly)
